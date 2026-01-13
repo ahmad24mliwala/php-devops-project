@@ -1,0 +1,2 @@
+[2025-11-04 15:25:39] ✅ checkout.php loaded
+[2025-11-04 15:25:39] ⚠️ Cart empty, redirect

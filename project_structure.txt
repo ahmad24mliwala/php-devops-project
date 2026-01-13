@@ -1,0 +1,348 @@
+.
+├── admin
+│   ├── admin_logs.php
+│   ├── ajax_dashboard.php
+│   ├── assests
+│   │   └── js
+│   │       └── admin.js
+│   ├── assets
+│   │   └── js
+│   │       └── admin.js
+│   ├── categories.php
+│   ├── contact_settings.php
+│   ├── coupons.php
+│   ├── customers.php
+│   ├── dashboard_data.php
+│   ├── edit_profile.php
+│   ├── email_template.php
+│   ├── get_order_summary.php
+│   ├── header.php
+│   ├── index.php
+│   ├── login.php
+│   ├── manage_admins.php
+│   ├── orders_table.php
+│   ├── orders.php
+│   ├── product_get.php
+│   ├── product_toggle_cart.php
+│   ├── product_toggle_price.php
+│   ├── product_update.php
+│   ├── products.php
+│   ├── profile.php
+│   ├── recent_orders.php
+│   ├── revenue.php
+│   ├── settings.php
+│   ├── super_admin_setup.php
+│   ├── update_order_status.php
+│   ├── users.php
+│   └── visits.php
+├── cart_debug.txt
+├── checkout_debug.txt
+├── composer.json
+├── composer.lock
+├── helpers
+│   └── create_admin_hash.php
+├── includes
+│   ├── db.php
+│   ├── functions.php
+│   ├── mail_config.php
+│   ├── mail.php
+│   └── profile.php
+├── invoice_debug.txt
+├── mail_debug.txt
+├── picklehub.sql
+├── project_structure.txt
+├── public
+│   ├── about.php
+│   ├── assets
+│   │   └── style.css
+│   ├── cart.php
+│   ├── checkout.php
+│   ├── contact.php
+│   ├── image.php
+│   ├── includes
+│   │   ├── footer.php
+│   │   └── header.php
+│   ├── index.php
+│   ├── invoice.php
+│   ├── login.php
+│   ├── logout.php
+│   ├── my-account.php
+│   ├── product-detail.php
+│   ├── products.php
+│   ├── register.php
+│   ├── send_invoice_email.php
+│   ├── test_mail.php
+│   ├── test-session.php
+│   ├── verify_login_otp.php
+│   └── verify_otp.php
+├── README.md
+├── test_mail.php
+├── test-db.php
+├── uploads
+│   ├── 1759224843_Amla Murabba.jpg
+│   ├── 1759415382_Amla Murabba.jpg
+│   ├── 1759415396_Dates Chutney.jpg
+│   ├── 1759415414_Karonda Pickle jar.jpg
+│   ├── 1759415435_Karonda Pickle.jpg
+│   ├── 1759415628_banner_1759405436_3.jpg
+│   ├── 1759415652_Gujarati-mango-pickle-1.jpg
+│   ├── 1759415675_Tamarind chutney.jpg
+│   ├── 1759416081_Tamarind chutney.jpg
+│   ├── 1759431336_1759415435_Karonda Pickle.jpg
+│   ├── 1759431345_1759416081_Tamarind chutney.jpg
+│   ├── 1759431361_cat_1759242874.jpg
+│   ├── 1759431371_Dates Chutney.jpg
+│   ├── 1759497742_Mango Pulp Banner.jpg
+│   ├── 1759497755_about_1759411651.jpg
+│   ├── 1759497774_banner_1759431844_0.jpg
+│   ├── 1759552516_banner_1759431844_0.jpg
+│   ├── 1759562190_banner_1759431844_0.jpg
+│   ├── 1759562341_1759415396_Dates Chutney.jpg
+│   ├── 1759562778_1759415396_Dates Chutney.jpg
+│   ├── 1760554784_1759415382_Amla Murabba.jpg
+│   ├── 1762272923_1759562190_banner_1759431844_0.jpg
+│   ├── 1762272946_1759415435_Karonda Pickle.jpg
+│   ├── 1762272956_1759497742_Mango Pulp Banner.jpg
+│   ├── 1762273007_1759562341_1759415396_Dates Chutney.jpg
+│   ├── 1762273042_Mango Pickle.jpg
+│   ├── 1762273081_Mango Murabba.jpg
+│   ├── 1762273136_1759416081_Tamarind chutney.jpg
+│   ├── 1763202392_Mango Pickle.jpg
+│   ├── 1763202451_1759415396_Dates Chutney.jpg
+│   ├── 1763202529_Dates & lemon Chutney.jpg
+│   ├── 1763202564_1759431336_1759415435_Karonda Pickle.jpg
+│   ├── 1763443838_1759552516_banner_1759431844_0.jpg
+│   ├── 1763443852_about_1759431786.jpg
+│   ├── 1763443868_about_1759411651.jpg
+│   ├── 1763536463_1759415652_Gujarati-mango-pickle-1.jpg
+│   ├── 1763536514_about_1759431786.jpg
+│   ├── about_1757919202.jpeg
+│   ├── about_1758289247.jpg
+│   ├── about_1759411651.jpg
+│   ├── about_1759411801.png
+│   ├── about_1759414953.png
+│   ├── about_1759431604.jpg
+│   ├── about_1759431786.jpg
+│   ├── about_1759815529.jpg
+│   ├── about_1762272875.jpg
+│   ├── about_1763443590.jpg
+│   ├── about_image.jpg
+│   ├── All Pouch Banner.jpg
+│   ├── All Pouch Banner.png
+│   ├── Amla Murabba.jpg
+│   ├── amla-murabba-.jpg
+│   ├── Avoji 3 bnr.jpg
+│   ├── Avoji_Logo_Englesh.jpg
+│   ├── BANNAR PIC.jpg
+│   ├── banner_1757616432.jpeg
+│   ├── banner_1757918942.jpeg
+│   ├── banner_1758288765.jpeg
+│   ├── banner_1758288767.jpeg
+│   ├── banner_1758289209.jpg
+│   ├── banner_1758291214.png
+│   ├── banner_1759405334_0.png
+│   ├── banner_1759405343_1.jpg
+│   ├── banner_1759405417_1.jpg
+│   ├── banner_1759405427_2.jpg
+│   ├── banner_1759405436_3.jpg
+│   ├── banner_1759411628_0.png
+│   ├── banner_1759431532_0.jpg
+│   ├── banner_1759431573_0.jpg
+│   ├── banner_1759431844_0.jpg
+│   ├── banner_1759486600_2.png
+│   ├── banner_1759486613_3.jpg
+│   ├── banner_1759815430_1.jpg
+│   ├── banner_1759815438_0.jpg
+│   ├── banner_1759815474_2.jpg
+│   ├── banner_1759815505_3.png
+│   ├── banner_1762272821_0.jpg
+│   ├── banner_1762272830_1.jpg
+│   ├── banner_1762272840_2.jpg
+│   ├── banner_1762272848_3.jpg
+│   ├── banner_1763376530_3.jpg
+│   ├── banner_1763443548_0.jpg
+│   ├── banner_1763443563_1.png
+│   ├── banner_1763443571_2.jpg
+│   ├── banner.jpeg
+│   ├── banner.jpg
+│   ├── banner1.jpg
+│   ├── Banner2.jpg
+│   ├── banner3.jpg
+│   ├── Bannerpic avoji.jpg
+│   ├── best-pickle-brands-in-india.png
+│   ├── bg1.png
+│   ├── cat_1758292783.jpg
+│   ├── cat_1758293195.jpg
+│   ├── cat_1758293389.jpg
+│   ├── cat_1758293522.jpg
+│   ├── cat_1758293525.jpg
+│   ├── cat_1758293836.jpg
+│   ├── cat_1758293841.jpg
+│   ├── cat_1759223181.jpg
+│   ├── cat_1759223347.jpg
+│   ├── cat_1759223358.jpg
+│   ├── cat_1759224731.jpg
+│   ├── cat_1759242874.jpg
+│   ├── cat_1759243063.jpg
+│   ├── cat_1759246612.jpg
+│   ├── cat_1759246633.png
+│   ├── Catlog.pdf
+│   ├── Dates & lemon Chutney.jpg
+│   ├── Dates & Tamarind Chutney.jpg
+│   ├── Dates Chutney jar.jpg
+│   ├── Dates Chutney.jpg
+│   ├── Garlic Chutney.jpg
+│   ├── ghugra crop.jpg
+│   ├── ghugra crop1.jpg
+│   ├── ghugra.jpg
+│   ├── Gor Keri jar.jpg
+│   ├── Gor Keri.jpg
+│   ├── Green Chill Lemon Pickle jar.jpg
+│   ├── Green Chille pickle.jpg
+│   ├── Gujarati-mango-pickle-.jpg
+│   ├── Gujarati-mango-pickle-1.jpg
+│   ├── Gunda Keri Pickle.jpg
+│   ├── Home-Slider-Image.png
+│   ├── home.jpeg
+│   ├── home1.jpeg
+│   ├── HOT BANNER.jpg
+│   ├── Karonda Pickle jar.jpg
+│   ├── Karonda Pickle.jpg
+│   ├── leaf pic.jpg
+│   ├── Lemon Hot Pickle.jpg
+│   ├── Lemon Pickle (Sweet).jpg
+│   ├── loading.gif
+│   ├── logo.png
+│   ├── Mango Chunda jar.jpg
+│   ├── Mango Chunda.jpg
+│   ├── Mango Chundda.jpg
+│   ├── Mango Murabba jar.jpg
+│   ├── Mango Murabba.jpg
+│   ├── Mango Pickle jar.jpg
+│   ├── Mango Pickle.jpg
+│   ├── Mango Pulp Banner.jpg
+│   ├── Mango pulp.jpg
+│   ├── mango.gif
+│   ├── mangopickle.jpg
+│   ├── Mixed Pickle jar.jpg
+│   ├── Mixed Pickle.jpg
+│   ├── NEW PIC LOGO.png
+│   ├── New pouch Design (1).png
+│   ├── New pouch Design.jpg
+│   ├── New pouch Design.png
+│   ├── offer1.png
+│   ├── offer2.png
+│   ├── offer3.png
+│   ├── Pineapple Murabba.jpg
+│   ├── pineapple-dance.gif
+│   ├── preview.jpeg
+│   ├── product_img1.jpg
+│   ├── product_img2.jpg
+│   ├── product_img3.jpg
+│   ├── product_img4.jpg
+│   ├── product_img5.jpg
+│   ├── product1.jpg
+│   ├── product2.jpg
+│   ├── Raita Keri Pickle.jpg
+│   ├── red-chilli-pickle-500x500.png
+│   ├── search_icon.png
+│   ├── Sweet Lemon Pickle jar.jpg
+│   ├── Sweet Lemon Pickle.jpg
+│   ├── Tamarind chutney.jpg
+│   ├── test.txt
+│   ├── tjdha8o8_pickle_625x300_19_June_20.jpg
+│   ├── Wa.png
+│   ├── Web Site Banner_HOT.jpg
+│   └── Web Site Banner_Sweet.jpg
+└── vendor
+    ├── autoload.php
+    ├── composer
+    │   ├── autoload_classmap.php
+    │   ├── autoload_namespaces.php
+    │   ├── autoload_psr4.php
+    │   ├── autoload_real.php
+    │   ├── autoload_static.php
+    │   ├── ClassLoader.php
+    │   ├── installed.json
+    │   ├── installed.php
+    │   ├── InstalledVersions.php
+    │   ├── LICENSE
+    │   └── platform_check.php
+    └── phpmailer
+        └── phpmailer
+            ├── COMMITMENT
+            ├── composer.json
+            ├── get_oauth_token.php
+            ├── language
+            │   ├── phpmailer.lang-af.php
+            │   ├── phpmailer.lang-ar.php
+            │   ├── phpmailer.lang-as.php
+            │   ├── phpmailer.lang-az.php
+            │   ├── phpmailer.lang-ba.php
+            │   ├── phpmailer.lang-be.php
+            │   ├── phpmailer.lang-bg.php
+            │   ├── phpmailer.lang-bn.php
+            │   ├── phpmailer.lang-ca.php
+            │   ├── phpmailer.lang-cs.php
+            │   ├── phpmailer.lang-da.php
+            │   ├── phpmailer.lang-de.php
+            │   ├── phpmailer.lang-el.php
+            │   ├── phpmailer.lang-eo.php
+            │   ├── phpmailer.lang-es.php
+            │   ├── phpmailer.lang-et.php
+            │   ├── phpmailer.lang-fa.php
+            │   ├── phpmailer.lang-fi.php
+            │   ├── phpmailer.lang-fo.php
+            │   ├── phpmailer.lang-fr.php
+            │   ├── phpmailer.lang-gl.php
+            │   ├── phpmailer.lang-he.php
+            │   ├── phpmailer.lang-hi.php
+            │   ├── phpmailer.lang-hr.php
+            │   ├── phpmailer.lang-hu.php
+            │   ├── phpmailer.lang-hy.php
+            │   ├── phpmailer.lang-id.php
+            │   ├── phpmailer.lang-it.php
+            │   ├── phpmailer.lang-ja.php
+            │   ├── phpmailer.lang-ka.php
+            │   ├── phpmailer.lang-ko.php
+            │   ├── phpmailer.lang-ku.php
+            │   ├── phpmailer.lang-lt.php
+            │   ├── phpmailer.lang-lv.php
+            │   ├── phpmailer.lang-mg.php
+            │   ├── phpmailer.lang-mn.php
+            │   ├── phpmailer.lang-ms.php
+            │   ├── phpmailer.lang-nb.php
+            │   ├── phpmailer.lang-nl.php
+            │   ├── phpmailer.lang-pl.php
+            │   ├── phpmailer.lang-pt_br.php
+            │   ├── phpmailer.lang-pt.php
+            │   ├── phpmailer.lang-ro.php
+            │   ├── phpmailer.lang-ru.php
+            │   ├── phpmailer.lang-si.php
+            │   ├── phpmailer.lang-sk.php
+            │   ├── phpmailer.lang-sl.php
+            │   ├── phpmailer.lang-sr_latn.php
+            │   ├── phpmailer.lang-sr.php
+            │   ├── phpmailer.lang-sv.php
+            │   ├── phpmailer.lang-tl.php
+            │   ├── phpmailer.lang-tr.php
+            │   ├── phpmailer.lang-uk.php
+            │   ├── phpmailer.lang-ur.php
+            │   ├── phpmailer.lang-vi.php
+            │   ├── phpmailer.lang-zh_cn.php
+            │   └── phpmailer.lang-zh.php
+            ├── LICENSE
+            ├── README.md
+            ├── SECURITY.md
+            ├── SMTPUTF8.md
+            ├── src
+            │   ├── DSNConfigurator.php
+            │   ├── Exception.php
+            │   ├── OAuth.php
+            │   ├── OAuthTokenProvider.php
+            │   ├── PHPMailer.php
+            │   ├── POP3.php
+            │   └── SMTP.php
+            └── VERSION
+
+18 directories, 328 files

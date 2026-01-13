@@ -1,0 +1,246 @@
+/* ------------------------------
+General Reset & Body
+------------------------------ */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    background-color: #f9f9f9;
+    color: #333;
+    font-size: 15px;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden; /* prevent horizontal scroll */
+}
+
+/* ------------------------------
+Navbar
+------------------------------ */
+.navbar {
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.navbar-brand {
+    font-size: 1.6rem;
+    color: #28a745 !important;
+    font-weight: bold;
+}
+
+/* ------------------------------
+Hero Carousel
+------------------------------ */
+.carousel-caption {
+    background: rgba(0,0,0,0.35);
+    padding: 1rem;
+    border-radius: 10px;
+}
+.carousel-caption h1 {
+    font-size: 2rem;
+    color: #ffc107;
+    font-weight: bold;
+}
+.carousel-caption a.btn {
+    font-weight: bold;
+    padding: 0.5rem 1.2rem;
+}
+
+/* ------------------------------
+Category Cards
+------------------------------ */
+.category-card {
+    transition: transform 0.3s, box-shadow 0.3s;
+    border: none;
+}
+.category-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+}
+.category-card img {
+    height: 160px;
+    object-fit: cover;
+    border-radius: 10px;
+    width: 100%;
+}
+.category-card .card-body h5 {
+    margin-bottom: 0.8rem;
+    font-size: 1rem;
+}
+
+/* ------------------------------
+Product Cards
+------------------------------ */
+.product-card {
+    transition: transform 0.3s, box-shadow 0.3s;
+    border: none;
+    animation: rotateCard 0.8s ease forwards;
+}
+.product-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+}
+.product-card img {
+    height: 180px;
+    object-fit: cover;
+    border-radius: 10px;
+    width: 100%;
+}
+.product-card .card-body h5 {
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+/* ------------------------------
+Buttons
+------------------------------ */
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+}
+.btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+.btn-success:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+}
+.btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+.btn-warning:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+}
+
+/* ------------------------------
+About Section
+------------------------------ */
+section#about-us img {
+    width: 100%;
+    border-radius: 10px;
+}
+section#about-us h2 {
+    font-size: 1.8rem;
+    color: #28a745;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+/* ------------------------------
+Footer
+------------------------------ */
+footer {
+    background-color: #222;
+    color: #ddd;
+    padding: 20px 0;
+    text-align: center;
+}
+footer h5 {
+    color: #ffc107;
+    margin-bottom: 1rem;
+}
+footer a {
+    color: #fff;
+    text-decoration: none;
+}
+footer a:hover {
+    color: #28a745;
+}
+footer .btn {
+    margin-top: 0.5rem;
+}
+
+/* ------------------------------
+Admin Dashboard / Forms
+------------------------------ */
+.container {
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+}
+h2, h4 {
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 20px;
+}
+.alert {
+    border-radius: 6px;
+}
+form input, form select, form textarea {
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+/* ------------------------------
+Tables
+------------------------------ */
+.table {
+    background: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.table th {
+    background: #f3f3f3;
+    font-weight: 600;
+}
+.table td, .table th {
+    vertical-align: middle;
+    font-size: 14px;
+}
+.table img {
+    border-radius: 4px;
+    object-fit: cover;
+    max-height: 60px;
+}
+
+/* ------------------------------
+Preview Images
+------------------------------ */
+.preview-img,
+#imgPreview,
+#categoryPreview {
+    display: none;
+    margin-top: 10px;
+    max-height: 100px;
+    border: 1px solid #ddd;
+    padding: 4px;
+    background: #fafafa;
+    border-radius: 6px;
+}
+
+/* ------------------------------
+Animations
+------------------------------ */
+@keyframes slideInLeft {
+    from { transform: translateX(-100px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slideInRight {
+    from { transform: translateX(100px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+@keyframes rotateCard {
+    from { transform: rotateY(90deg); opacity: 0; }
+    to { transform: rotateY(0); opacity: 1; }
+}
+.about-animate-img { animation: slideInLeft 1s ease forwards; }
+.about-animate-text { animation: slideInRight 1s ease forwards; }
+
+/* ------------------------------
+Responsive tweaks
+------------------------------ */
+@media (max-width: 992px) {
+    .carousel-caption h1 { font-size: 1.6rem; }
+    .product-card img { height: 150px; }
+    .category-card img { height: 140px; }
+    footer { text-align: center; }
+}
+@media (max-width: 576px) {
+    .navbar-brand { font-size: 1.4rem; }
+    .carousel-caption { padding: 0.8rem; }
+    .carousel-caption h1 { font-size: 1.3rem; }
+    .btn { padding: 0.4rem 1rem; font-size: 14px; }
+    section#about-us h2 { font-size: 1.5rem; }
+    h2, h4 { font-size: 1.3rem; }
+}
