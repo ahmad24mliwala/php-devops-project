@@ -1,0 +1,21 @@
+# Dependencies
+vendor/
+
+# Environment
+.env
+
+# Uploads & cache
+uploads/
+cache/
+tmp/
+
+# Logs
+*.log
+
+# Database dumps & archives
+*.sql
+*.zip
+
+# OS
+.DS_Store
+
