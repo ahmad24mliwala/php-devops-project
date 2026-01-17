@@ -121,7 +121,7 @@
     document.addEventListener('click', (e) => {
       if (window.innerWidth <= 991) {
         const target = e.target;
-        if (!sidebar.contains(target) && !mobileOpen.contains(target) && sidebar.classList.contains('open')) {
+        if (!sidebar.contains(target) && (!mobileOpen || !mobileOpen.contains(target)) && sidebar.classList.contains('open')) {
           sidebar.classList.remove('open');
           if (overlay) overlay.classList.remove('show');
         }

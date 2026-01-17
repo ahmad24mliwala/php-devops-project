@@ -5,11 +5,11 @@ error_reporting(E_ALL);
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/functions.php';
+//require_once __DIR__ . '/includes/track_visit.php'; 
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-
 
 // Log visit
 log_visit($pdo);
@@ -46,14 +46,22 @@ $waSanitized = preg_replace('/[^0-9+]/', '', $wa);
 if ($waSanitized && $waSanitized[0] !== '+') $waSanitized = '+91' . $waSanitized;
 
 /* -------------------------
-   Add to Cart
+   Add to Cart (server-side)
 ---------------------------*/
 if (isset($_GET['action']) && $_GET['action'] === 'add' && isset($_GET['id'])) {
+
+    // 🔒 Require login before add to cart
+    if (!isset($_SESSION['user']['id'])) {
+        header("Location: login.php?redirect=products.php");
+        exit;
+    }
+
     $addId = (int)$_GET['id'];
     if ($addId > 0) {
         $stmt = $pdo->prepare("SELECT id,name,price,image,is_cart_enabled FROM products WHERE id=? LIMIT 1");
         $stmt->execute([$addId]);
         $prod = $stmt->fetch(PDO::FETCH_ASSOC);
+
         if ($prod && $prod['is_cart_enabled']) {
             if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
             if (!isset($_SESSION['cart'][$addId])) {
@@ -68,6 +76,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'add' && isset($_GET['id'])) {
             }
         }
     }
+
     header('Location: cart.php');
     exit;
 }
@@ -75,27 +84,33 @@ if (isset($_GET['action']) && $_GET['action'] === 'add' && isset($_GET['id'])) {
 /* -------------------------
    Filters
 ---------------------------*/
-$category_id = $_GET['category_id'] ?? '';
-$search      = trim($_GET['search'] ?? '');
-$page        = max(1, (int)($_GET['page'] ?? 1));
-$limit       = 12;
-$offset      = ($page - 1) * $limit;
+
+/* -------------------------
+   Filters (SEO Friendly)
+---------------------------*/
+$category_slug = trim($_GET['category'] ?? '');
+$search        = trim($_GET['search'] ?? '');
+$page          = max(1, (int)($_GET['page'] ?? 1));
+$limit         = 12;
+$offset        = ($page - 1) * $limit;
 
 $whereSQL = " WHERE 1 ";
-$params = [];
+$params   = [];
 
-if ($category_id !== '') {
-    $category_id = (int)$category_id;
-    if ($category_id > 0) {
-        $whereSQL .= " AND category_id = :cat ";
-        $params[':cat'] = $category_id;
-    }
+/* CATEGORY FILTER USING SLUG */
+if ($category_slug !== '') {
+    $whereSQL .= " AND category_id = (
+        SELECT id FROM categories WHERE slug = :slug LIMIT 1
+    )";
+    $params[':slug'] = $category_slug;
 }
 
+/* SEARCH FILTER */
 if ($search !== '') {
     $whereSQL .= " AND name LIKE :search ";
     $params[':search'] = "%$search%";
 }
+
 
 /* -------------------------
    Count
@@ -112,7 +127,7 @@ $pages = max(1, (int)ceil($total / $limit));
 $sql = "SELECT id, slug, name, price, image, is_cart_enabled, price_enabled, weight
         FROM products
         $whereSQL
-        ORDER BY created_at DESC
+        ORDER BY sort_order ASC, created_at DESC
         LIMIT :limit OFFSET :offset";
 
 $stmt = $pdo->prepare($sql);
@@ -122,7 +137,17 @@ $stmt->bindValue(':limit',  (int)$limit, PDO::PARAM_INT);
 $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
 
 $stmt->execute();
-$products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$cacheKey = md5($whereSQL . serialize($params) . $page);
+$cacheFile = __DIR__ . "/cache/products_$cacheKey.php";
+
+if (file_exists($cacheFile) && time() - filemtime($cacheFile) < 300) {
+    $products = include $cacheFile;
+} else {
+    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    file_put_contents($cacheFile, '<?php return ' . var_export($products, true) . ';');
+}
+
 
 /* -------------------------
    Image Handling
@@ -136,10 +161,17 @@ unset($p);
 /* -------------------------
    Categories
 ---------------------------*/
-$categories = $pdo->query("SELECT id,name FROM categories ORDER BY name ASC")->fetchAll();
+$categories = $pdo->query("
+    SELECT id, name, slug 
+    FROM categories 
+    ORDER BY name ASC
+")->fetchAll();
+
+
 
 /* FIXED BASE URL FOR CLEAN URL SETUP */
-$baseURL = '';  // <--- FIXED
+$baseURL = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/');
+  // <--- FIXED
 
 ?>
 <!DOCTYPE html>
@@ -150,6 +182,9 @@ $baseURL = '';  // <--- FIXED
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
+<link rel="canonical" href="https://<?= $_SERVER['HTTP_HOST'] ?>/products.php<?= $category_slug ? '?category='.$category_slug : '' ?>">
+
+
 
 <style>
 .product-card img {
@@ -183,27 +218,35 @@ $baseURL = '';  // <--- FIXED
 <h2 class="text-center mb-4">Products</h2>
 
 <!-- FILTERS -->
-<form class="row g-2 mb-4 justify-content-center" method="GET">
+<form id="productFilterForm" class="row g-2 mb-4 justify-content-center" method="GET">
+
     <div class="col-md-4 col-12">
-        <select name="category_id" class="form-select">
-            <option value="">All Categories</option>
-            <?php foreach ($categories as $c): ?>
-                <option value="<?=h($c['id'])?>" <?=($category_id==$c['id'])?'selected':''?>>
-                    <?=h($c['name'])?>
-                </option>
-            <?php endforeach; ?>
-        </select>
+        <select name="category" class="form-select" onchange="this.form.submit()">
+    <option value="">All Categories</option>
+    <?php foreach ($categories as $c): ?>
+        <option value="<?= h($c['slug']) ?>"
+            <?= ($category_slug === $c['slug']) ? 'selected' : '' ?>>
+            <?= h($c['name']) ?>
+        </option>
+    <?php endforeach; ?>
+</select>
+
     </div>
 
     <div class="col-md-5 col-12">
-        <input type="text" name="search" class="form-control"
-               value="<?=h($search)?>" placeholder="Search products...">
+        <input type="text"
+               id="searchInput"
+               name="search"
+               class="form-control"
+               value="<?=h($search)?>"
+               placeholder="Search products...">
     </div>
 
     <div class="col-md-3 col-12">
         <button class="btn btn-success w-100">Filter</button>
     </div>
 </form>
+
 
 <!-- PRODUCT GRID -->
 <div class="row g-4">
@@ -215,15 +258,21 @@ $baseURL = '';  // <--- FIXED
         ? "https://wa.me/".rawurlencode($waSanitized)."?text=".rawurlencode($waText)
         : "contact.php?product=".urlencode($p['name']);
 
-    /* FIXED VIEW URL — uses id instead of slug */
-    $detailLink = $baseURL . '/product-detail.php?id=' . $p['id'];
+    $slug = trim($p['slug'] ?? '');
+$detailLink = $slug
+    ? $baseURL . '/product-detail.php?slug=' . urlencode($slug)
+    : $baseURL . '/product-detail.php?id=' . $p['id'];
+
+
+    $loggedIn = isset($_SESSION['user']['id']);
     ?>
 
     <div class="col-6 col-md-3 product-card" data-aos="zoom-in">
         <div class="card border-0 shadow-sm h-100">
 
-            <img src="<?=$p['image_path']?>"
-                 onload="this.classList.add('loaded')"
+            <img loading="lazy" src="<?=$p['image_path']?>" 
+
+                onload="this.classList.add('loaded')"
                  alt="<?=h($p['name'])?>">
 
             <div class="card-body text-center d-flex flex-column">
@@ -240,9 +289,21 @@ $baseURL = '';  // <--- FIXED
                     <p class="card-weight"><?=h($p['weight'])?></p>
                 <?php endif; ?>
 
+                <!-- 🔒 LOGIN PROTECTION FOR ADD TO CART -->
                 <?php if ($p['is_cart_enabled']): ?>
-                    <a class="btn btn-success btn-sm mb-1 w-100"
-                       href="<?=$baseURL?>/products.php?action=add&id=<?=$p['id']?>">Add to Cart</a>
+
+                    <?php if (!$loggedIn): ?>
+                        <a class="btn btn-warning btn-sm mb-1 w-100"
+                           href="login.php?redirect=products.php">
+                           Login to Add
+                        </a>
+                    <?php else: ?>
+                        <a class="btn btn-success btn-sm mb-1 w-100"
+                           href="<?=$baseURL?>/products.php?action=add&id=<?=$p['id']?>">
+                           Add to Cart
+                        </a>
+                    <?php endif; ?>
+
                 <?php else: ?>
                     <a class="btn btn-warning btn-sm mb-1 w-100"
                        href="<?=$waLink?>" target="_blank">Enquire</a>
@@ -273,9 +334,14 @@ $baseURL = '';  // <--- FIXED
         <?php for ($i=1; $i <= $pages; $i++): ?>
             <li class="page-item <?=($i==$page) ? 'active' : ''?>">
                 <a class="page-link"
-                   href="?<?= http_build_query(['category_id'=>$category_id,'search'=>$search,'page'=>$i]) ?>">
-                   <?=$i?>
-                </a>
+   href="?<?= http_build_query([
+        'category' => $category_slug,
+        'search'   => $search,
+        'page'     => $i
+   ]) ?>">
+   <?= $i ?>
+</a>
+
             </li>
         <?php endfor; ?>
     </ul>
@@ -284,11 +350,63 @@ $baseURL = '';  // <--- FIXED
 
 </div>
 
+<script>
+(() => {
+    const form = document.getElementById('productFilterForm');
+    const search = document.getElementById('searchInput');
+    const category = document.getElementById('categorySelect');
+
+    if (!form || !search || !category) return;
+
+    <script>
+let timer;
+document.querySelector('input[name="search"]').addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+        this.form.submit();
+    }, 500); // wait 500ms after typing
+});
+
+
+
+    // Auto submit on typing (with debounce)
+    search.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            form.submit();
+        }, 500); // 0.5 sec delay
+    });
+
+    // Auto submit on category change
+    category.addEventListener('change', () => {
+        form.submit();
+    });
+})();
+</script>
+
+<script>
+const searchInput = document.querySelector('input[name="search"]');
+let searchTimer;
+
+if (searchInput) {
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      searchInput.form.submit();
+    }, 500); // waits 500ms after typing stops
+  });
+}
+</script>
+
+
+
 <?php include __DIR__ . '/includes/footer.php'; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
 <script>AOS.init({ duration:700 });</script>
+
+
 
 </body>
 </html>

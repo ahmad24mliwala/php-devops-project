@@ -46,22 +46,24 @@ if (isset($_GET['export']) && $_GET['export'] === "csv") {
 
     $out = fopen("php://output", "w");
     fputcsv($out, ["ID", "Name", "Email", "Joined On"]);
-    foreach ($users as $u) fputcsv($out, [$u['id'], $u['name'], $u['email'], $u['created_at']]);
+    foreach ($users as $u)
+        fputcsv($out, [$u['id'], $u['name'], $u['email'], $u['created_at']]);
     exit;
 }
 
-/* ---------- EXPORT XLSX (Fake Excel = CSV) ---------- */
+/* ---------- EXPORT XLSX ---------- */
 if (isset($_GET['export']) && $_GET['export'] === "xlsx") {
     header("Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     header("Content-Disposition: attachment; filename=customers.xlsx");
 
     $out = fopen("php://output", "w");
     fputcsv($out, ["ID", "Name", "Email", "Joined On"]);
-    foreach ($users as $u) fputcsv($out, [$u['id'], $u['name'], $u['email'], $u['created_at']]);
+    foreach ($users as $u)
+        fputcsv($out, [$u['id'], $u['name'], $u['email'], $u['created_at']]);
     exit;
 }
 
-/* ---------- EXPORT PDF (Browser Print) ---------- */
+/* ---------- EXPORT PDF ---------- */
 if (isset($_GET['export']) && $_GET['export'] === "pdf") {
     echo "<h2>Customers PDF Export</h2>";
     echo "<table border='1' cellspacing='0' cellpadding='8'>";
@@ -84,7 +86,6 @@ if (isset($_GET['export']) && $_GET['export'] === "pdf") {
 <link href="../public/assets/style.css" rel="stylesheet">
 
 <style>
-/* Customer Card (Mobile) */
 .card-customer {
     border-radius: 12px;
     background: #fff;
@@ -97,20 +98,17 @@ if (isset($_GET['export']) && $_GET['export'] === "pdf") {
 .customer-email { font-size: 0.9rem; color: #444; }
 .customer-joined { font-size: 0.8rem; color: #777; }
 
-/* Mobile grid */
 .mobile-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
     gap: 12px;
 }
 
-/* Hide desktop table on mobile */
 @media (max-width:768px){
     .table-container { display:none; }
     .btn-group { width:100%; }
 }
 
-/* Hide mobile cards on desktop */
 @media (min-width:769px){
     .mobile-view { display:none; }
 }
@@ -122,7 +120,6 @@ if (isset($_GET['export']) && $_GET['export'] === "pdf") {
 
 <div class="container my-4">
 
-    <!-- Header + Export -->
     <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
         <h2 class="text-success fw-bold mb-2">Customers</h2>
 
@@ -133,7 +130,6 @@ if (isset($_GET['export']) && $_GET['export'] === "pdf") {
         </div>
     </div>
 
-    <!-- Search + Limit -->
     <form class="row g-2 mb-3">
         <div class="col-12 col-md-4">
             <input type="text" name="search" value="<?=h($search)?>" class="form-control" placeholder="Search name or email">
@@ -152,7 +148,6 @@ if (isset($_GET['export']) && $_GET['export'] === "pdf") {
         </div>
     </form>
 
-    <!-- MOBILE VIEW -->
     <div class="mobile-view">
         <div class="mobile-grid">
             <?php foreach($users as $u): ?>
@@ -167,7 +162,6 @@ if (isset($_GET['export']) && $_GET['export'] === "pdf") {
         </div>
     </div>
 
-    <!-- DESKTOP TABLE -->
     <div class="table-container">
         <table class="table table-bordered table-striped">
             <thead class="table-success">
@@ -188,7 +182,6 @@ if (isset($_GET['export']) && $_GET['export'] === "pdf") {
         </table>
     </div>
 
-    <!-- Pagination -->
     <nav class="mt-3">
         <ul class="pagination justify-content-center">
             <?php if ($page > 1): ?>
@@ -207,109 +200,7 @@ if (isset($_GET['export']) && $_GET['export'] === "pdf") {
 
 </div>
 
-
-
-
-</main>
-</div>
-</div>
-
-<script>
-/* ================= DARK MODE ================= */
-(function(){
-    const body = document.body;
-    const toggle = document.getElementById("themeToggle");
-    const icon = document.getElementById("themeIcon");
-
-    let dark = document.cookie.includes("admin_dark=1");
-
-    if(!document.cookie.includes("admin_dark=")){
-        dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-
-    applyTheme(dark);
-
-    function applyTheme(d){
-        body.classList.toggle("dark-mode", d);
-        icon.classList.replace(d ? "bi-moon-stars" : "bi-sun-fill", d ? "bi-sun-fill" : "bi-moon-stars");
-    }
-
-    toggle.addEventListener("click", ()=>{
-        dark = !dark;
-        applyTheme(dark);
-        document.cookie = "admin_dark="+(dark?1:0)+"; path=/; max-age=31536000";
-    });
-})();
-
-/* ================= SIDEBAR ================= */
-(function(){
-    const sidebar = document.getElementById("adminSidebar");
-    const overlay = document.getElementById("sidebarOverlay");
-    const toggle = document.getElementById("sidebarToggle");
-    const mobileOpen = document.getElementById("mobileOpen");
-
-    toggle.addEventListener("click", ()=> sidebar.classList.toggle("collapsed"));
-    mobileOpen.addEventListener("click", ()=>{
-        sidebar.classList.add("open");
-        overlay.classList.add("show");
-    });
-
-    overlay.addEventListener("click", ()=>{
-        sidebar.classList.remove("open");
-        overlay.classList.remove("show");
-    });
-
-    document.addEventListener("click",(e)=>{
-        if(window.innerWidth <= 991 &&
-           !sidebar.contains(e.target) &&
-           !mobileOpen.contains(e.target)){
-            sidebar.classList.remove("open");
-            overlay.classList.remove("show");
-        }
-    });
-})();
-
-/* ================= SWIPE TO OPEN ================= */
-(function(){
-    let startX = 0;
-    window.addEventListener("touchstart",(e)=> startX = e.touches[0].clientX);
-    window.addEventListener("touchend",(e)=>{
-        if(startX < 40 && e.changedTouches[0].clientX > 120){
-            document.getElementById("adminSidebar").classList.add("open");
-            document.getElementById("sidebarOverlay").classList.add("show");
-        }
-    });
-})();
-
-/* ================= QUICK ACTION BUTTON ================= */
-(function(){
-    const btn = document.createElement("div");
-    btn.id = "quickBtn";
-    btn.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Quick Actions';
-    document.body.appendChild(btn);
-    btn.onclick = ()=> alert("Add custom actions here!");
-})();
-
-/* ================= THEME COLOR PICKER ================= */
-(function(){
-    const pick = document.createElement("input");
-    pick.type="color";
-    pick.id="themePicker";
-    pick.value="#198754";
-    document.body.appendChild(pick);
-
-    pick.addEventListener("input",(e)=>{
-        document.documentElement.style.setProperty("--brand-1",e.target.value);
-        document.documentElement.style.setProperty("--brand-2",e.target.value);
-    });
-})();
-</script>
-
-<script src="/picklehub_project/admin/assets/js/admin.js" defer></script>
+<script src="/picklehub_project/admin/assets/js/admin.js?v=4" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js" defer></script>
-
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-

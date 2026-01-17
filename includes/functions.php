@@ -112,7 +112,60 @@ function get_device_type() {
 }
 
 /**
- * Log a site visit
+ * =====================================================
+ * ADVANCED ANALYTICS: Sessions, Pageviews, Bounce Rate
+ * =====================================================
+ */
+
+/**
+ * Track session start (count unique visitor session)
+ */
+function track_session($pdo) {
+    if (!isset($_SESSION['session_id'])) {
+        $_SESSION['session_id'] = bin2hex(random_bytes(20));
+        $_SESSION['session_start'] = time();
+        $_SESSION['pageviews'] = 0;
+
+        $session_id = $_SESSION['session_id'];
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $device = get_device_type();
+
+        $stmt = $pdo->prepare("INSERT INTO sessions (session_id, ip_address, device_type, started_at) 
+                               VALUES (?, ?, ?, NOW())");
+        $stmt->execute([$session_id, $ip, $device]);
+    }
+}
+
+/**
+ * Track page view
+ */
+function track_pageview($pdo) {
+    track_session($pdo);
+
+    $session_id = $_SESSION['session_id'];
+    $url = $_SERVER['REQUEST_URI'] ?? '';
+    $_SESSION['pageviews']++;
+
+    $stmt = $pdo->prepare("INSERT INTO pageviews (session_id, url, viewed_at)
+                           VALUES (?, ?, NOW())");
+    $stmt->execute([$session_id, $url]);
+}
+
+/**
+ * Update session duration (for average session time)
+ */
+function update_session_duration($pdo) {
+    if (!isset($_SESSION['session_id']) || !isset($_SESSION['session_start'])) return;
+
+    $session_id = $_SESSION['session_id'];
+    $duration = time() - $_SESSION['session_start'];
+
+    $stmt = $pdo->prepare("UPDATE sessions SET duration=? WHERE session_id=?");
+    $stmt->execute([$duration, $session_id]);
+}
+
+/**
+ * Log unique visitor (first visit of the day)
  */
 function log_visit($pdo) {
     try {
@@ -121,14 +174,24 @@ function log_visit($pdo) {
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
         $device = get_device_type();
 
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM visits WHERE ip_address=? AND DATE(visited_at)=CURDATE()");
+        // Is NEW visitor for TODAY?
+        $stmt = $pdo->prepare("SELECT COUNT(*) FROM visits 
+                               WHERE ip_address=? AND DATE(visited_at)=CURDATE()");
         $stmt->execute([$ip]);
         $is_new = ($stmt->fetchColumn() == 0) ? 1 : 0;
 
+        // Record the entry
         $stmt = $pdo->prepare("INSERT INTO visits (ip_address,url,user_agent,device_type,is_new,visited_at)
                                VALUES (?,?,?,?,?,NOW())");
         $stmt->execute([$ip,$url,$ua,$device,$is_new]);
-    } catch (Exception $e) { error_log("Visit Log Error: ".$e->getMessage()); }
+
+        // Track advanced analytics
+        track_pageview($pdo);
+        update_session_duration($pdo);
+
+    } catch (Exception $e) { 
+        error_log("Visit Log Error: ".$e->getMessage()); 
+    }
 }
 
 /**
@@ -190,16 +253,10 @@ function current_user() {
  * ========================
  */
 
-/**
- * Generate random 6-digit OTP
- */
 function generate_otp() {
     return rand(100000, 999999);
 }
 
-/**
- * Store OTP for a user
- */
 function store_user_otp($pdo, $user_id, $otp, $purpose = 'login') {
     $expires_at = date('Y-m-d H:i:s', strtotime('+10 minutes'));
     $pdo->prepare("DELETE FROM user_otps WHERE user_id=? AND purpose=?")->execute([$user_id, $purpose]);
@@ -207,9 +264,6 @@ function store_user_otp($pdo, $user_id, $otp, $purpose = 'login') {
     $stmt->execute([$user_id, $otp, $purpose, $expires_at]);
 }
 
-/**
- * Verify OTP
- */
 function verify_user_otp($pdo, $user_id, $otp, $purpose = 'login') {
     $stmt = $pdo->prepare("SELECT * FROM user_otps 
                            WHERE user_id=? AND otp_code=? AND purpose=? 
@@ -224,15 +278,15 @@ function verify_user_otp($pdo, $user_id, $otp, $purpose = 'login') {
 }
 
 /**
- * Send OTP email for registration verification (PHPMailer)
+ * Emails
  */
 require_once __DIR__ . '/mail.php';
 
 function send_otp_email($email, $otp) {
-    $subject = "PickleHub - Verify Your Account";
+    $subject = "Avoji Foods - Verify Your Account";
     $html = "
         <p>Hello,</p>
-        <p>Your PickleHub verification code is:</p>
+        <p>Your Avoji Foods verification code is:</p>
         <h2 style='color:#28a745;'>$otp</h2>
         <p>This code will expire in 10 minutes.</p>
         <p>Thank you,<br>PickleHub Team</p>
@@ -240,11 +294,8 @@ function send_otp_email($email, $otp) {
     return send_email($email, $subject, $html);
 }
 
-/**
- * Send OTP email for login MFA (PHPMailer)
- */
 function send_login_otp_email($email, $otp) {
-    $subject = "PickleHub - Login Verification Code";
+    $subject = "Avoji Foods - Login Verification Code";
     $html = "
         <p>Hello,</p>
         <p>Your login verification code is:</p>
@@ -314,5 +365,59 @@ function update_order_status($order_id, $status) {
         return false;
     }
 }
+
+/**
+ * Admin Activity Logger
+ */
+function log_admin_activity(
+    $action,
+    $entity_type,
+    $entity_id = null,
+    $description = ''
+) {
+    global $pdo;
+
+    if (empty($_SESSION['user']['id'])) return;
+
+    try {
+        $stmt = $pdo->prepare("
+            INSERT INTO admin_activity_logs
+            (admin_id, action, entity_type, entity_id, description, ip_address, user_agent)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+
+        $stmt->execute([
+            $_SESSION['user']['id'],
+            $action,
+            $entity_type,
+            $entity_id,
+            $description,
+            $_SERVER['REMOTE_ADDR'] ?? '',
+            substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255)
+        ]);
+    } catch (Exception $e) {
+        error_log("Admin activity log failed: " . $e->getMessage());
+    }
+}
+
+
+function make_slug(string $text): string {
+    $text = strtolower(trim($text));
+    $text = preg_replace('/[^a-z0-9]+/i', '-', $text);
+    $text = trim($text, '-');
+    return $text ?: uniqid();
+}
+
+if (!function_exists('make_slug')) {
+    function make_slug(string $text): string {
+        $text = strtolower(trim($text));
+        $text = preg_replace('/[^a-z0-9]+/', '-', $text);
+        return trim($text, '-');
+    }
+}
+
+
+
+
 
 ?>

@@ -321,3 +321,84 @@
 [2025-11-22 14:05:18] 🧾 Order items inserted successfully
 [2025-11-22 16:16:37] 🧾 cart.php loaded
 [2025-11-22 16:16:52] 🧾 cart.php loaded
+[2025-11-23 21:11:17] 🧾 cart.php loaded
+[2025-11-23 21:11:21] 🧾 cart.php loaded
+[2025-11-23 21:11:25] 🧾 cart.php loaded
+[2025-11-24 01:19:02] 🧾 cart.php loaded
+[2025-11-24 01:19:47] 🧾 cart.php loaded
+[2025-11-24 01:19:47] 🔵 Transaction started
+[2025-11-24 01:19:47] ✅ Order inserted | ID: 1
+[2025-11-24 01:19:47] 🧾 Order items inserted successfully
+[2025-11-24 01:41:40] 🧾 cart.php loaded
+[2025-11-24 01:41:40] ⚠️ Cart empty, redirecting
+[2025-11-24 01:59:50] 🧾 cart.php loaded
+[2025-11-24 02:28:56] 🧾 cart.php loaded
+[2025-11-24 02:28:56] ⚠️ Cart empty, redirecting
+[2025-11-24 02:29:04] 🧾 cart.php loaded
+[2025-11-24 02:29:04] ⚠️ Cart empty, redirecting
+[2025-11-24 05:13:02] 🧾 cart.php loaded
+[2025-11-24 05:13:02] ⚠️ Cart empty, redirecting
+[2025-11-24 05:13:04] 🧾 cart.php loaded
+[2025-11-24 05:13:04] ⚠️ Cart empty, redirecting
+[2025-11-24 23:44:31] 🧾 cart.php loaded
+[2025-11-24 23:44:38] 🧾 cart.php loaded
+[2025-11-24 23:44:38] 🧾 cart.php loaded
+[2025-11-24 23:44:38] ⚠️ Cart empty, redirecting
+[2025-11-24 23:45:23] 🧾 cart.php loaded
+[2025-11-24 23:45:23] ⚠️ Cart empty, redirecting
+[2025-11-24 23:45:29] 🧾 cart.php loaded
+[2025-11-24 23:45:31] 🧾 cart.php loaded
+[2025-11-24 23:45:33] 🧾 cart.php loaded
+[2025-11-24 23:46:20] 🧾 cart.php loaded
+[2025-11-24 23:46:20] 🔵 Transaction started
+[2025-11-24 23:46:20] ✅ Order inserted | ID: 2
+[2025-11-24 23:46:20] 🧾 Order items inserted successfully
+[2025-11-24 23:46:56] 🧾 cart.php loaded
+[2025-11-24 23:46:56] ⚠️ Cart empty, redirecting
+[2025-11-24 23:46:59] 🧾 cart.php loaded
+[2025-11-24 23:46:59] ⚠️ Cart empty, redirecting
+[2025-11-24 23:47:01] 🧾 cart.php loaded
+[2025-11-24 23:47:01] ⚠️ Cart empty, redirecting
+[2025-11-24 23:47:10] 🧾 cart.php loaded
+[2025-11-25 05:26:33] 🧾 cart.php loaded
+[2025-11-25 05:26:33] ⚠️ Cart empty, redirecting
+[2025-11-26 01:04:47] 🧾 cart.php loaded
+[2025-11-26 01:05:12] 🧾 cart.php loaded
+[2025-11-26 01:05:12] 🔵 Transaction started
+[2025-11-26 01:05:12] ✅ Order inserted | ID: 3
+[2025-11-26 01:05:12] 🧾 Order items inserted successfully
+[2025-11-26 01:06:19] 🧾 cart.php loaded
+[2025-11-26 01:06:44] 🧾 cart.php loaded
+[2025-11-26 01:06:44] 🔵 Transaction started
+[2025-11-26 01:06:44] ✅ Order inserted | ID: 4
+[2025-11-26 01:06:44] 🧾 Order items inserted successfully
+[2025-11-26 02:43:23] 🧾 cart.php loaded
+[2025-11-26 02:43:23] ⚠️ Cart empty, redirecting
+[2025-11-26 02:43:27] 🧾 cart.php loaded
+[2025-11-26 02:43:53] 🧾 cart.php loaded
+[2025-11-26 02:43:53] 🔵 Transaction started
+[2025-11-26 02:43:53] ✅ Order inserted | ID: 5
+[2025-11-26 02:43:53] 🧾 Order items inserted successfully
+[2025-11-26 02:58:44] 🧾 cart.php loaded
+[2025-11-26 02:58:44] ⚠️ Cart empty, redirecting
+[2025-11-27 00:19:34] 🧾 cart.php loaded
+[2025-11-27 00:19:34] ⚠️ Cart empty, redirecting
+[2025-11-27 00:35:11] 🧾 cart.php loaded
+[2025-11-27 16:09:36] 🧾 cart.php loaded
+[2025-11-27 16:09:36] ⚠️ Cart empty, redirecting
+[2025-11-27 16:11:58] 🧾 cart.php loaded
+[2025-11-27 16:11:58] ⚠️ Cart empty, redirecting
+[2025-12-07 14:45:54] 🧾 cart.php loaded
+[2025-12-07 14:45:54] ⚠️ Cart empty, redirecting
+[2025-12-07 14:47:28] 🧾 cart.php loaded
+[2025-12-07 14:47:28] ⚠️ Cart empty, redirecting
+[2025-12-08 12:24:27] 🧾 cart.php loaded
+[2025-12-08 12:24:27] ⚠️ Cart empty, redirecting
+[2025-12-08 23:04:09] 🧾 cart.php loaded
+[2025-12-08 23:04:09] ⚠️ Cart empty, redirecting
+[2025-12-11 11:24:00] 🧾 cart.php loaded
+[2025-12-11 11:24:00] ⚠️ Cart empty, redirecting
+[2025-12-13 15:14:01] 🧾 cart.php loaded
+[2025-12-13 15:14:01] ⚠️ Cart empty, redirecting
+[2025-12-15 15:08:00] 🧾 cart.php loaded
+[2025-12-15 15:08:00] ⚠️ Cart empty, redirecting

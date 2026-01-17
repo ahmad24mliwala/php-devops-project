@@ -1,67 +1,114 @@
 <?php
 // admin/contact.php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+
+
+
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
+ini_set('log_errors', 1);
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+
+header('X-Frame-Options: SAMEORIGIN');
+header('X-Content-Type-Options: nosniff');
+header('Cache-Control: no-store, no-cache, must-revalidate');
+header('Pragma: no-cache');
 
 require '../includes/db.php';
 require '../includes/functions.php';
-is_admin(); // only admin can access
+is_admin();
 
 $success = '';
-$errors = [];
+$errors  = [];
 
-// Handle form submission
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+/* ================= HANDLE SAVE ================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    if (!verify_csrf($_POST['csrf'] ?? '')) {
+        $errors[] = "Invalid session token. Please refresh the page.";
+    }
+
     $shop_address = trim($_POST['shop_address'] ?? '');
-    $shop_phone = trim($_POST['shop_phone'] ?? '');
-    $shop_email = trim($_POST['shop_email'] ?? '');
-    $whatsapp_number = trim($_POST['whatsapp_number'] ?? '');
-    $map_iframe = trim($_POST['homepage_map_embed'] ?? '');
+    $shop_phone   = trim($_POST['shop_phone'] ?? '');
+    $shop_email   = trim($_POST['shop_email'] ?? '');
+    $whatsapp     = trim($_POST['whatsapp_number'] ?? '');
+    $map_iframe   = trim($_POST['homepage_map_embed'] ?? '');
 
-    // Basic validation
-    if (!$shop_address) $errors[] = "Shop address is required.";
-    if (!$shop_phone) $errors[] = "Shop phone number is required.";
-    if (!$shop_email) $errors[] = "Shop email is required.";
-    if (!$whatsapp_number) $errors[] = "WhatsApp number is required.";
-    if (!$map_iframe) $errors[] = "Map iframe embed code is required.";
+    if ($shop_address === '') $errors[] = "Shop address is required.";
 
-    // Save settings
+    foreach (explode(',', $shop_phone) as $phone) {
+    if (!preg_match('/^[0-9+\s-]{6,}$/', trim($phone))) {
+        $errors[] = "Invalid phone number: {$phone}";
+        break;
+    }
+}
+
+
+    foreach (explode(',', $shop_email) as $email) {
+        if (!filter_var(trim($email), FILTER_VALIDATE_EMAIL)) {
+            $errors[] = "Invalid email address: {$email}";
+            break;
+        }
+    }
+
+    if (!preg_match('/^[0-9]{8,15}$/', preg_replace('/\D/', '', $whatsapp)))
+        $errors[] = "Invalid WhatsApp number.";
+
+    if (
+        strpos($map_iframe, '<iframe') === false ||
+        strpos($map_iframe, 'google.com/maps') === false
+    ) {
+        $errors[] = "Invalid Google Maps embed code.";
+    }
+
     if (!$errors) {
+
         $settings = [
-            'shop_address' => $shop_address,
-            'shop_phone' => $shop_phone,
-            'shop_email' => $shop_email,
-            'whatsapp_number' => $whatsapp_number,
+            'shop_address'       => $shop_address,
+            'shop_phone'         => $shop_phone,
+            'shop_email'         => $shop_email,
+            'whatsapp_number'    => preg_replace('/\D/', '', $whatsapp),
             'homepage_map_embed' => $map_iframe
         ];
 
-        foreach ($settings as $key => $value) {
-            $stmt = $pdo->prepare("
-                INSERT INTO settings (`key`, `value`)
-                VALUES (?, ?)
-                ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)
-            ");
-            $stmt->execute([$key, $value]);
+        $stmt = $pdo->prepare("
+            INSERT INTO settings (`key`,`value`)
+            VALUES (?,?)
+            ON DUPLICATE KEY UPDATE `value`=VALUES(`value`)
+        ");
+
+        foreach ($settings as $k => $v) {
+            $stmt->execute([$k, $v]);
         }
+
+        log_admin_activity(
+            'update',
+            'settings',
+            null,
+            'Contact settings updated'
+        );
 
         $success = "Contact settings updated successfully!";
     }
 }
 
-// Fetch current settings
+/* ================= FETCH SETTINGS ================= */
 $current_settings = [];
-$stmt = $pdo->query("SELECT `key`, `value` FROM settings");
-while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    $current_settings[$row['key']] = $row['value'];
+$q = $pdo->query("SELECT `key`,`value` FROM settings");
+while ($r = $q->fetch(PDO::FETCH_ASSOC)) {
+    $current_settings[$r['key']] = $r['value'];
 }
 
-// Default Google Map Embed (Avoji Foods)
+/* DEFAULT MAP */
 if (empty($current_settings['homepage_map_embed'])) {
-    $current_settings['homepage_map_embed'] = '<iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3756.2211851320574!2d73.78803847498928!3d19.70061368164456!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3bddeb4f5f4ad4e9%3A0xc4e92a28e91f602b!2sAvoji%20Foods!5e0!3m2!1sen!2sin!4v1726768905298!5m2!1sen!2sin"
-    width="100%" height="500" style="border:0;" allowfullscreen="" loading="lazy"></iframe>';
+    $current_settings['homepage_map_embed'] = '<iframe src="https://www.google.com/maps/embed?pb=!1m18!..." width="100%" height="500" style="border:0;" loading="lazy"></iframe>';
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -123,6 +170,8 @@ textarea, input { resize: none; }
             <?php endif; ?>
 
             <form method="POST" novalidate>
+                <input type="hidden" name="csrf" value="<?= h(csrf_token()) ?>">
+
                 <div class="mb-3">
                     <label for="shop_address" class="form-label fw-semibold">Shop Address</label>
                     <textarea name="shop_address" id="shop_address" class="form-control" rows="2" required><?= h($current_settings['shop_address'] ?? '') ?></textarea>

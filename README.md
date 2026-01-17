@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# grocery-project
-=======
 # PickleHub - PHP E-commerce Starter
 
 ## Setup
@@ -16,4 +13,3 @@
 - This project is a starter kit covering the requested features (secure PDO, CSRF tokens, admin area, invoice generation support).
 - For full production readiness: add input sanitization, HTTPS, email sending, background jobs, rate limiting, and stronger validation.
 
->>>>>>> 265cc89 (grocery-project)

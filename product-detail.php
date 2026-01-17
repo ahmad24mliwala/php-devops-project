@@ -5,12 +5,13 @@ error_reporting(E_ALL);
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/functions.php';
+//require_once __DIR__ . '/includes/track_visit.php'; 
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-log_visit($pdo);
+//log_visit($pdo);
 
 // ----------------------------------------------
 // GET WHATSAPP NUMBER FROM SETTINGS
@@ -38,21 +39,31 @@ if ($whatsapp && !preg_match('/^\+/', $whatsapp)) {
 // ----------------------------------------------
 // FETCH PRODUCT
 // ----------------------------------------------
-$id = (int)($_GET['id'] ?? 0);
+// ----------------------------------------------
+// FETCH PRODUCT (SEO FRIENDLY - BY SLUG)
+// ----------------------------------------------
+$slug = trim($_GET['slug'] ?? '');
+
+if ($slug === '') {
+    header("Location: products.php");
+    exit;
+}
+
 $stmt = $pdo->prepare("
     SELECT p.*, c.name AS category_name
     FROM products p
     LEFT JOIN categories c ON p.category_id = c.id
-    WHERE p.id = ?
+    WHERE p.slug = ?
     LIMIT 1
 ");
-$stmt->execute([$id]);
+$stmt->execute([$slug]);
 $product = $stmt->fetch();
 
 if (!$product) {
     header("Location: products.php");
     exit;
 }
+
 
 // ----------------------------------------------
 // IMAGE PATH FIX
@@ -75,7 +86,8 @@ $ogImage = $scheme . "://" . $host . "/" . $mainImageUrl;
 $seoTitle = h($product['name']) . " | Avoji Foods";
 $seoDesc  = substr(strip_tags($product['description']), 0, 150) . "...";
 
-$canonical = $scheme . "://" . $host . "/product-detail.php?id=" . $product['id'];
+$canonical = $scheme . "://" . $host . "/product/" . $product['slug'];
+
 
 // ----------------------------------------------
 // RELATED PRODUCTS
@@ -83,46 +95,69 @@ $canonical = $scheme . "://" . $host . "/product-detail.php?id=" . $product['id'
 $related = [];
 if (!empty($product['category_id'])) {
     $stmt = $pdo->prepare("
-        SELECT id, name, price, image, price_enabled
-        FROM products
-        WHERE category_id = ? AND id <> ?
-        ORDER BY created_at DESC LIMIT 4
-    ");
+    SELECT id, slug, name, price, image, price_enabled
+    FROM products
+    WHERE category_id = ? AND id <> ?
+    ORDER BY created_at DESC LIMIT 4
+");
+
     $stmt->execute([$product['category_id'], $product['id']]);
     $related = $stmt->fetchAll();
 }
 
 // ----------------------------------------------
-// ADD TO CART
+// ADD TO CART (BACKEND)
 // ----------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
-    if (!verify_csrf($_POST['csrf_token'])) die("❌ Invalid CSRF");
 
-    if (!$product['is_cart_enabled']) {
-        $_SESSION['flash_error'] = "Not available for online purchase.";
-        header("Location: product-detail.php?id=" . $id);
+    // 🔒 Force login
+    if (!isset($_SESSION['user']['id'])) {
+        header("Location: login.php?redirect=product/" . urlencode($product['slug']));
         exit;
     }
 
-    $qty = max(1, (int)$_POST['qty']);
+    // 🛡 CSRF check
+    if (!verify_csrf($_POST['csrf_token'])) {
+        die("❌ Invalid CSRF token");
+    }
 
-    if (!isset($_SESSION['cart'])) $_SESSION['cart'] = [];
-    if (!isset($_SESSION['cart'][$id])) {
-        $_SESSION['cart'][$id] = [
-            "name" => $product['name'],
+    // ❌ Cart disabled
+    if (!$product['is_cart_enabled']) {
+        $_SESSION['flash_error'] = "Not available for online purchase.";
+        header("Location: /product/" . urlencode($product['slug']));
+        exit;
+    }
+
+    // ✅ Quantity
+    $qty = max(1, (int)($_POST['qty'] ?? 1));
+
+    // ✅ Product ID
+    $productId = (int)$product['id'];
+
+    // ✅ Init cart
+    if (!isset($_SESSION['cart'])) {
+        $_SESSION['cart'] = [];
+    }
+
+    // ✅ Add / Update cart
+    if (!isset($_SESSION['cart'][$productId])) {
+        $_SESSION['cart'][$productId] = [
+            "name"  => $product['name'],
             "price" => $product['price'],
-            "qty" => $qty,
+            "qty"   => $qty,
             "image" => $product['image']
         ];
     } else {
-        $_SESSION['cart'][$id]['qty'] += $qty;
+        $_SESSION['cart'][$productId]['qty'] += $qty;
     }
 
+    // 🚀 Redirect to cart
     header("Location: cart.php");
     exit;
 }
 
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -143,7 +178,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
 <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
 
 <style>
-/* IMAGE WRAP */
 .product-img-wrap {
     width: 100%;
     background: #fff;
@@ -153,30 +187,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     text-align: center;
     border: 1px solid #eee;
 }
-
-/* ANIMATION */
 .product-img {
     width: 100%;
-    height: auto;
     max-height: 430px;
     object-fit: contain;
     transition: transform .4s ease, opacity .4s ease;
     opacity: 0;
 }
-.product-img.loaded {
-    opacity: 1;
-}
-.product-img:hover {
-    transform: scale(1.06);
-}
-
-/* MOBILE OPTIMIZATION */
+.product-img.loaded { opacity: 1; }
+.product-img:hover { transform: scale(1.06); }
 @media(max-width:768px){
   .product-img{ max-height:300px; }
   h1{ font-size:1.4rem; }
 }
-
-/* RELATED PRODUCTS */
 .related-card img {
     width: 100%;
     height: 160px;
@@ -185,8 +208,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
     padding: 8px;
     border-radius: 6px;
 }
-
-/* VIEW MORE BUTTON */
 .view-more-btn {
     display: block;
     margin: 20px auto 0;
@@ -213,7 +234,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
             </a>
         </li>
         <?php endif; ?>
-        <li class="breadcrumb-item active"><?= h($product['name']) ?></li>
+        <li class="breadcrumb-item active" aria-current="page">
+  <?= h($product['name']) ?>
+</li>
       </ol>
     </nav>
 
@@ -250,12 +273,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
 
             <!-- ADD TO CART -->
             <?php if ($product['is_cart_enabled']): ?>
-            <form method="POST" class="d-flex gap-2 mt-3" style="max-width:300px;">
-                <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-                <input type="hidden" name="add_to_cart" value="1">
-                <input type="number" name="qty" min="1" value="1" class="form-control" style="width:90px;">
-                <button class="btn btn-success" type="submit">🛒 Add to Cart</button>
-            </form>
+
+                <?php if (!isset($_SESSION['user']['id'])): ?>
+                    <!-- 🔒 Guest user must login -->
+                    <a href="login.php?redirect=product/<?= urlencode($product['slug']) ?>"
+
+                       class="btn btn-warning w-100 mt-3">
+                       🔒 Login to Add to Cart
+                    </a>
+
+                <?php else: ?>
+                    <!-- Logged-in user -->
+                    <form method="POST" class="d-flex gap-2 mt-3" style="max-width:300px;">
+                        <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                        <input type="hidden" name="add_to_cart" value="1">
+                        <input type="number" name="qty" min="1" value="1" class="form-control" style="width:90px;">
+                        <button class="btn btn-success" type="submit">🛒 Add to Cart</button>
+                    </form>
+                <?php endif; ?>
+
             <?php endif; ?>
 
             <!-- WHATSAPP -->
@@ -290,7 +326,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_to_cart'])) {
                     <?php else: ?>
                     <p class="text-muted mb-1">Price on request</p>
                     <?php endif; ?>
-                    <a href="product-detail.php?id=<?= $r['id'] ?>" class="btn btn-outline-primary btn-sm w-100">View</a>
+              <?php
+$detailLink = !empty($r['slug'])
+    ? 'product-detail.php?slug=' . urlencode($r['slug'])
+    : 'product-detail.php?id=' . (int)$r['id'];
+?>
+
+<a href="<?= h($detailLink) ?>"
+   class="btn btn-outline-primary btn-sm w-100">
+   View
+</a>
+
+
                 </div>
             </div>
         </div>

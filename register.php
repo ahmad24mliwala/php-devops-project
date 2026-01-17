@@ -6,14 +6,13 @@ error_reporting(E_ALL);
 
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/functions.php';
-require_once __DIR__ . '/includes/mail.php'; // ✅ REQUIRED FIX
+require_once __DIR__ . '/includes/mail.php';
 
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-// Log visit once
 log_visit($pdo);
 
-// If logged in, redirect
+// If logged in
 if (is_logged_in()) {
     flash('info', 'You are already logged in.');
     redirect('my-account.php');
@@ -32,60 +31,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password = $_POST['password'] ?? '';
     $confirm  = $_POST['confirm_password'] ?? '';
 
-    // Required fields
-    if (!$name || !$email || !$password || !$confirm) {
-        $errors[] = 'All fields are required.';
-    }
+    // Validation
+    if (!$name || !$email || !$password || !$confirm) $errors[] = 'All fields are required.';
+    if (strlen($name) < 2) $errors[] = "Full name must be at least 2 characters.";
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Invalid email format.';
+    if ($password !== $confirm) $errors[] = 'Passwords do not match.';
+    if (strlen($password) < 6) $errors[] = 'Password must be at least 6 characters.';
 
-    if (strlen($name) < 2) {
-        $errors[] = "Full name must be at least 2 characters.";
-    }
-
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'Please enter a valid email address.';
-    }
-
-    if ($password !== $confirm) {
-        $errors[] = 'Passwords do not match.';
-    }
-
-    if (strlen($password) < 6) {
-        $errors[] = 'Password must be at least 6 characters.';
-    }
-
-    // Duplicate email check
+    // Check email already exists
     $stmt = $pdo->prepare("SELECT id FROM users WHERE email=? LIMIT 1");
     $stmt->execute([$email]);
     if ($stmt->fetch()) {
-        $errors[] = 'Email already exists.';
+        $errors[] = 'Email already registered. Please log in.';
     }
 
-    // Success → Register
-    if (empty($errors)) {
-
+    // If valid → Create account
+    if (!$errors) {
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
         $stmt = $pdo->prepare("
-            INSERT INTO users (name, email, password, role, is_verified, created_at)
-            VALUES (?, ?, ?, 'customer', 0, NOW())
+            INSERT INTO users (name,email,password,role,is_verified,created_at)
+            VALUES (?,?,?,'customer',0,NOW())
         ");
         $stmt->execute([$name, $email, $hash]);
 
         $user_id = $pdo->lastInsertId();
 
-        // Generate OTP
+        // Create OTP
         $otp = generate_otp();
+
+        // Store in DB
         store_user_otp($pdo, $user_id, $otp, 'register');
 
-        // Send OTP email
-        send_otp_email($email, $otp);
+        // Send email
+        $emailStatus = send_otp_email($email, $otp);
 
-        // Set verification session
-        $_SESSION['pending_user_id'] = $user_id;
-        $_SESSION['pending_email'] = $email;
+        if (!$emailStatus) {
+            $errors[] = "Account created but OTP email could not be sent. Contact support.";
+        } else {
+            $_SESSION['pending_user_id'] = $user_id;
+            $_SESSION['pending_email'] = $email;
 
-        flash('success', 'Registration successful! Check your email for your verification code.');
-        redirect('verify_otp.php');
+            flash('success', 'Account created! Check your email for the OTP verification code.');
+            redirect('verify_otp.php');
+        }
     }
 }
 ?>
@@ -93,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Register - PickleHub</title>
+<title>Register - Avoji Foods</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -111,12 +100,6 @@ body {
     padding: 30px;
     border-radius: 16px;
     box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-}
-@media (max-width: 576px) {
-    .register-card {
-        margin: 20px 10px;
-        padding: 20px;
-    }
 }
 </style>
 </head>
@@ -174,7 +157,5 @@ body {
 </div>
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
-
 </body>
 </html>

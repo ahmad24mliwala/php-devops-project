@@ -1,419 +1,332 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
 require '../includes/db.php';
 require '../includes/functions.php';
 is_admin();
 
-// ==========================
-// RESET VISITS (Password Protected)
-// ==========================
-if (isset($_POST['confirm_reset']) && isset($_POST['admin_password'])) {
-    $password = trim($_POST['admin_password']);
-    $admin_id = $_SESSION['user']['id'] ?? 0;
+/* ==========================================================
+   SAFE AUTO CLEANUP (ONCE PER DAY – 180 DAYS)
+========================================================== */
+$today = date('Y-m-d');
+$last = $pdo->query("SELECT value FROM settings WHERE `key`='visits_cleanup'")->fetchColumn();
 
-    $stmt = $pdo->prepare("SELECT password FROM users WHERE id=? LIMIT 1");
-    $stmt->execute([$admin_id]);
-    $hash = $stmt->fetchColumn();
+if ($last !== $today) {
+    $pdo->exec("DELETE FROM visits WHERE visited_at < NOW() - INTERVAL 180 DAY");
+    $stmt = $pdo->prepare("
+        INSERT INTO settings (`key`,`value`)
+        VALUES ('visits_cleanup',?)
+        ON DUPLICATE KEY UPDATE value=VALUES(value)
+    ");
+    $stmt->execute([$today]);
+}
 
-    if ($hash && password_verify($password, $hash)) {
-        $pdo->exec("TRUNCATE TABLE visits");
-        flash('success', "✅ All visit data has been reset successfully.");
-    } else {
-        flash('error', "❌ Invalid admin password. Reset aborted.");
+/* ==========================================================
+   FILTER NORMALIZATION
+========================================================== */
+function normalizeDate($v){
+    return $v ? str_replace('T',' ',$v).':00' : '';
+}
+
+$from = normalizeDate($_GET['from'] ?? '');
+$to   = normalizeDate($_GET['to'] ?? '');
+$page_type = $_GET['page_type'] ?? '';
+$device = $_GET['device'] ?? '';
+$is_new = $_GET['is_new'] ?? '';
+
+$where=[]; 
+$params=[];
+if($from){$where[]="visited_at>=?";$params[]=$from;}
+if($to){$where[]="visited_at<=?";$params[]=$to;}
+if($page_type){$where[]="page_type=?";$params[]=$page_type;}
+if($device){$where[]="device_type=?";$params[]=$device;}
+if($is_new!==''){$where[]="is_new=?";$params[]=(int)$is_new;}
+$whereSQL=$where?"WHERE ".implode(" AND ",$where):"";
+
+/* ==========================================================
+   EXPORT CSV
+========================================================== */
+if(isset($_GET['export'])){
+    header('Content-Type:text/csv');
+    header('Content-Disposition:attachment; filename=visits.csv');
+    $stmt=$pdo->prepare("
+        SELECT ip_address,device_type,page_type,is_new,visited_at
+        FROM visits $whereSQL ORDER BY visited_at DESC
+    ");
+    $stmt->execute($params);
+    $out=fopen('php://output','w');
+    fputcsv($out,['IP','Device','Page','User','Date']);
+    while($r=$stmt->fetch(PDO::FETCH_ASSOC)){
+        fputcsv($out,[
+            $r['ip_address'],
+            $r['device_type'],
+            $r['page_type'],
+            $r['is_new']?'New':'Returning',
+            $r['visited_at']
+        ]);
     }
-
-    header("Location: visit.php");
+    fclose($out); 
     exit;
 }
 
-// ==========================
-// FILTERS & SEARCH
-// ==========================
-$filter = $_GET['filter'] ?? 'all';
-$device_filter = $_GET['device_filter'] ?? '';
-$search = $_GET['search'] ?? '';
-$view_all = isset($_GET['view_all']); 
+/* ==========================================================
+   METRIC HELPER
+========================================================== */
+function metric($pdo,$sql,$params=[]){
+    $s=$pdo->prepare($sql);
+    $s->execute($params);
+    return (int)$s->fetchColumn();
+}
 
-$where = [];
-if ($filter == 'today') $where[] = "DATE(visited_at)=CURDATE()";
-elseif ($filter == 'week') $where[] = "WEEK(visited_at)=WEEK(CURDATE())";
-elseif ($filter == 'month') $where[] = "MONTH(visited_at)=MONTH(CURDATE())";
+/* ==========================================================
+   KPI METRICS (BOT + DEVICE FIXED)
+========================================================== */
+$metrics=[
+ 'total'=>metric($pdo,"SELECT COUNT(DISTINCT visitor_id) FROM visits $whereSQL",$params),
+ 'today'=>metric($pdo,"SELECT COUNT(DISTINCT visitor_id) FROM visits WHERE DATE(visited_at)=CURDATE()"),
+ 'week'=>metric($pdo,"SELECT COUNT(DISTINCT visitor_id) FROM visits WHERE visited_at>=CURDATE()-INTERVAL 7 DAY"),
+ 'new'=>metric($pdo,"SELECT COUNT(DISTINCT visitor_id) FROM visits WHERE is_new=1"),
+ 'returning'=>metric($pdo,"SELECT COUNT(DISTINCT visitor_id) FROM visits WHERE is_new=0"),
 
-if ($device_filter) $where[] = "device_type='$device_filter'";
-if ($search) $where[] = "(ip_address LIKE '%$search%' OR user_agent LIKE '%$search%')";
+ // ✅ FIXED: unique bot IPs only
+ 'bots'=>metric(
+     $pdo,
+     "SELECT COUNT(DISTINCT ip_address)
+      FROM visits
+      WHERE user_agent REGEXP 'bot|crawl|spider|slurp'"
+ )
+];
 
-$where_sql = $where ? "WHERE " . implode(" AND ", $where) : '';
+/* ==========================================================
+   DEVICE COUNTS (FIXED)
+========================================================== */
+$totalDevice=$pdo->query("
+    SELECT device_type, COUNT(DISTINCT visitor_id) c
+    FROM visits
+    GROUP BY device_type
+")->fetchAll(PDO::FETCH_KEY_PAIR);
 
-// Limit top 20 unless “view_all”
-$limit_sql = $view_all ? "" : "LIMIT 20";
-$visits = $pdo->query("SELECT * FROM visits $where_sql ORDER BY visited_at DESC $limit_sql")->fetchAll();
+$todayDevice=$pdo->query("
+    SELECT device_type, COUNT(DISTINCT visitor_id) c
+    FROM visits
+    WHERE DATE(visited_at)=CURDATE()
+    GROUP BY device_type
+")->fetchAll(PDO::FETCH_KEY_PAIR);
 
-// Summary counts
-$total_visits = $pdo->query("SELECT COUNT(*) FROM visits")->fetchColumn();
-$new_visits = $pdo->query("SELECT COUNT(*) FROM visits WHERE is_new=1")->fetchColumn();
-$returning_visits = $pdo->query("SELECT COUNT(*) FROM visits WHERE is_new=0")->fetchColumn();
-$desktop_visits = $pdo->query("SELECT COUNT(*) FROM visits WHERE device_type='desktop'")->fetchColumn();
-$mobile_visits = $pdo->query("SELECT COUNT(*) FROM visits WHERE device_type='mobile'")->fetchColumn();
-$tablet_visits = $pdo->query("SELECT COUNT(*) FROM visits WHERE device_type='tablet'")->fetchColumn();
-$new_today_count = $pdo->query("SELECT COUNT(*) FROM visits WHERE DATE(visited_at)=CURDATE()")->fetchColumn();
+/* ==========================================================
+   WEEKLY VISITS
+========================================================== */
+$weekly=$pdo->query("
+    SELECT DATE(visited_at) d, COUNT(DISTINCT visitor_id) c
+    FROM visits
+    WHERE visited_at>=CURDATE()-INTERVAL 7 DAY
+    GROUP BY d ORDER BY d
+")->fetchAll(PDO::FETCH_ASSOC);
 
-// Daily visit chart
-$daily_visits = $pdo->query("SELECT DATE(visited_at) as day, COUNT(*) as count FROM visits GROUP BY day ORDER BY day ASC")->fetchAll(PDO::FETCH_ASSOC);
+/* ==========================================================
+   PRODUCT VISITS (CHART + TABLE)
+========================================================== */
+$productStats=$pdo->query("
+    SELECT p.name, COUNT(*) v
+    FROM visits v
+    JOIN products p ON p.id=v.product_id
+    WHERE v.page_type='product'
+    GROUP BY p.id
+    ORDER BY v DESC
+")->fetchAll();
+
+/* ==========================================================
+   PAGE VISITS
+========================================================== */
+$pageStats=$pdo->query("
+    SELECT page_type, COUNT(*) c
+    FROM visits
+    GROUP BY page_type
+    ORDER BY c DESC
+")->fetchAll(PDO::FETCH_KEY_PAIR);
+
+/* ==========================================================
+   IP PAGINATION
+========================================================== */
+$perPage=10;
+$page=max(1,(int)($_GET['page']??1));
+$offset=($page-1)*$perPage;
+
+$totalIps=metric($pdo,"SELECT COUNT(DISTINCT ip_address) FROM visits");
+$totalPages=ceil($totalIps/$perPage);
+
+$ipVisits=$pdo->query("
+    SELECT ip_address,
+           MAX(device_type) device_type,
+           MAX(page_type) page_type,
+           COUNT(*) visits,
+           MAX(visited_at) last_visit
+    FROM visits
+    GROUP BY ip_address
+    ORDER BY last_visit DESC
+    LIMIT $perPage OFFSET $offset
+")->fetchAll();
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>Website Visits - Admin</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Visits Analytics</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-body {
-  background: #f8fafc;
-  font-family: 'Poppins', sans-serif;
-}
-h2 {
-  font-weight: 600;
-  color: #333;
-}
-.card-summary { 
-  color:white; 
-  text-align:center; 
-  padding:20px; 
-  border-radius:18px; 
-  box-shadow:0 6px 20px rgba(0,0,0,0.15);
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.2);
-}
-.card-summary:hover {
-  transform:translateY(-6px);
-  box-shadow:0 8px 25px rgba(0,0,0,0.2);
-}
-.card-summary h4 { margin:0; font-size:1.8rem; font-weight:700; }
-.card-summary h6 { margin:0; font-weight:500; opacity:0.9; }
-
-.card-total    { background: linear-gradient(135deg, #007bff, #00a2ff); }
-.card-new      { background: linear-gradient(135deg, #00c851, #10b981); }
-.card-return   { background: linear-gradient(135deg, #ffbb33, #ff8800); }
-.card-desktop  { background: linear-gradient(135deg, #33b5e5, #0099cc); }
-.card-mobile   { background: linear-gradient(135deg, #6f42c1, #8e44ad); }
-.card-tablet   { background: linear-gradient(135deg, #ff7043, #ff9800); }
-
-.table thead th {
-  color: #000 !important;
-  background-color: #f8f9fa !important;
-  font-weight: 600;
-  border-bottom: 2px solid #dee2e6;
-}
-.table tbody tr:hover {
-  background-color: rgba(0,0,0,0.04);
-  transition: 0.2s;
-}
-.btn-reset-small {
-  padding: 0.4rem 0.8rem;
-  font-size: 0.8rem;
-  border-radius: 8px;
-  box-shadow: 0 3px 6px rgba(220,53,69,0.2);
-}
-.btn-reset-small:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 10px rgba(220,53,69,0.3);
-}
-.card {
-  border-radius: 14px;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-}
-.card h5 {
-  font-weight: 600;
-}
-@media (max-width: 768px) {
-  .card-summary { padding: 15px; }
-  .card-summary h4 { font-size: 1.4rem; }
-  .card-summary h6 { font-size: 0.9rem; }
-  h2 { font-size: 1.4rem; }
-  .table { font-size: 0.85rem; }
-  .btn-reset-small { width: 100%; }
-}
+body{background:#f4f7fb}
+.kpi{border-radius:14px;padding:14px;color:#fff;text-align:center}
+.card{border-radius:16px}
 </style>
 </head>
 <body>
 <?php include 'header.php'; ?>
 
-<div class="container my-4">
-  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
-    <h2>Website Visits Overview</h2>
-  </div>
+<div class="container-fluid p-3">
+<h4 class="fw-bold mb-3">📊 Website Analytics</h4>
 
-  <?php if ($msg = flash('success')): ?>
-      <div class="alert alert-success shadow-sm"><?= h($msg) ?></div>
-  <?php elseif ($msg = flash('error')): ?>
-      <div class="alert alert-danger shadow-sm"><?= h($msg) ?></div>
-  <?php endif; ?>
-
-  <!-- Summary Cards -->
-  <div class="row g-3 mb-4">
-    <div class="col-6 col-md-2"><div class="card-summary card-total"><h6>Total Visits</h6><h4><?= $total_visits ?></h4></div></div>
-    <div class="col-6 col-md-2"><div class="card-summary card-new"><h6>New Visits</h6><h4><?= $new_visits ?></h4></div></div>
-    <div class="col-6 col-md-2"><div class="card-summary card-return"><h6>Returning</h6><h4><?= $returning_visits ?></h4></div></div>
-    <div class="col-6 col-md-2"><div class="card-summary card-desktop"><h6>Desktop</h6><h4><?= $desktop_visits ?></h4></div></div>
-    <div class="col-6 col-md-2"><div class="card-summary card-mobile"><h6>Mobile</h6><h4><?= $mobile_visits ?></h4></div></div>
-    <div class="col-6 col-md-2"><div class="card-summary card-tablet"><h6>Tablet</h6><h4><?= $tablet_visits ?></h4></div></div>
-  </div>
-
-  <!-- Reset Button Below Cards -->
-  <div class="text-end mb-3">
-      <button type="button" class="btn btn-sm btn-danger btn-reset-small" data-bs-toggle="modal" data-bs-target="#confirmResetModal">
-          Reset Visits
-      </button>
-  </div>
-
-  <!-- Analytics Charts -->
-  <div class="row my-4">
-    <div class="col-md-6 mb-3">
-      <div class="card p-3">
-        <h5 class="text-center mb-3">Visits by Device</h5>
-        <canvas id="deviceChart"></canvas>
-      </div>
-    </div>
-    <div class="col-md-6 mb-3">
-      <div class="card p-3">
-        <h5 class="text-center mb-3">Daily Visits Trend</h5>
-        <canvas id="dailyChart"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Filters -->
-  <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-    <form class="d-flex gap-2 flex-wrap" method="GET">
-      <input type="text" name="search" class="form-control form-control-sm" placeholder="Search IP/User Agent" value="<?=h($search)?>">
-      <select name="filter" class="form-select form-select-sm">
-        <option value="all" <?= ($filter=='all')?'selected':'' ?>>All Dates</option>
-        <option value="today" <?= ($filter=='today')?'selected':'' ?>>Today</option>
-        <option value="week" <?= ($filter=='week')?'selected':'' ?>>This Week</option>
-        <option value="month" <?= ($filter=='month')?'selected':'' ?>>This Month</option>
-      </select>
-      <select name="device_filter" class="form-select form-select-sm">
-        <option value="">All Devices</option>
-        <option value="desktop" <?= ($device_filter=='desktop')?'selected':'' ?>>Desktop</option>
-        <option value="mobile" <?= ($device_filter=='mobile')?'selected':'' ?>>Mobile</option>
-        <option value="tablet" <?= ($device_filter=='tablet')?'selected':'' ?>>Tablet</option>
-      </select>
-      <button type="submit" class="btn btn-sm btn-primary shadow-sm">Filter</button>
-    </form>
-
-    <a href="?download=1&filter=<?= $filter ?>&device_filter=<?= $device_filter ?>&search=<?= urlencode($search) ?>" 
-       class="btn btn-sm btn-success ms-auto shadow-sm">Download Report</a>
-  </div>
-
-  <!-- Visits Table -->
-  <div class="card shadow-sm">
-    <div class="card-body">
-      <h5 class="mb-3">Recent Visits</h5>
-      <div class="table-responsive">
-        <table class="table table-striped align-middle">
-          <thead>
-            <tr>
-              <th>ID</th><th>IP Address</th><th>User Agent</th><th>Device Type</th><th>New/Returning</th><th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            <?php foreach ($visits as $v): ?>
-            <tr>
-              <td><?= $v['id'] ?></td>
-              <td><?= htmlspecialchars($v['ip_address']) ?></td>
-              <td class="text-break"><?= htmlspecialchars($v['user_agent']) ?></td>
-              <td><?= ucfirst($v['device_type']) ?></td>
-              <td><?= $v['is_new'] ? 'New' : 'Returning' ?></td>
-              <td><?= $v['visited_at'] ?></td>
-            </tr>
-            <?php endforeach; ?>
-            <?php if (empty($visits)): ?>
-            <tr><td colspan="6" class="text-center">No visit data available.</td></tr>
-            <?php endif; ?>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- View More / Show Less -->
-      <?php if (!$view_all && $total_visits > 20): ?>
-      <div class="text-center mt-3">
-        <a href="?<?= http_build_query(array_merge($_GET, ['view_all' => 1])) ?>" class="btn btn-outline-primary btn-sm">
-          View More (<?= $total_visits - 20 ?> more)
-        </a>
-      </div>
-      <?php elseif ($view_all && $total_visits > 20): ?>
-      <div class="text-center mt-3">
-        <a href="visit.php" class="btn btn-outline-secondary btn-sm">Show Less</a>
-      </div>
-      <?php endif; ?>
-    </div>
-  </div>
+<!-- KPI -->
+<div class="row g-2">
+<?php foreach([
+['Total','#2563eb',$metrics['total']],
+['Today','#06b6d4',$metrics['today']],
+['Week','#16a34a',$metrics['week']],
+['New','#22c55e',$metrics['new']],
+['Returning','#f97316',$metrics['returning']],
+['Bots','#7c3aed',$metrics['bots']],
+] as [$t,$c,$v]): ?>
+<div class="col-6 col-md-2">
+<div class="kpi" style="background:<?=$c?>">
+<h5><?=$v?></h5><?=$t?>
+</div>
+</div>
+<?php endforeach;?>
 </div>
 
-<!-- 🔐 Confirm Reset Modal -->
-<div class="modal fade" id="confirmResetModal" tabindex="-1">
-  <div class="modal-dialog">
-    <form method="POST" class="modal-content">
-      <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title">Confirm Reset Visits</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p>This will permanently delete <strong>all visit records</strong>.<br>
-        Please enter your admin password to confirm.</p>
-        <input type="password" name="admin_password" class="form-control" placeholder="Enter admin password" required>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button type="submit" name="confirm_reset" class="btn btn-sm btn-danger">Confirm Reset</button>
-      </div>
-    </form>
-  </div>
+<!-- DEVICE CARDS -->
+<div class="row g-2 mt-3">
+<?php foreach([
+['Total Desktop','#7c3aed',$totalDevice['desktop']??0],
+['Total Mobile','#06b6d4',$totalDevice['mobile']??0],
+['Today Desktop','#9333ea',$todayDevice['desktop']??0],
+['Today Mobile','#0891b2',$todayDevice['mobile']??0],
+] as [$t,$c,$v]): ?>
+<div class="col-6 col-md-3">
+<div class="kpi" style="background:<?=$c?>">
+<h5><?=$v?></h5><?=$t?>
+</div>
+</div>
+<?php endforeach;?>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-// Device Chart
-new Chart(document.getElementById('deviceChart'), {
-  type: 'doughnut',
-  data: {
-    labels: ['Desktop', 'Mobile', 'Tablet'],
-    datasets: [{
-      data: [<?= $desktop_visits ?>, <?= $mobile_visits ?>, <?= $tablet_visits ?>],
-      backgroundColor: ['#0d6efd','#6f42c1','#fd7e14'],
-      borderWidth: 0
-    }]
-  },
-  options: { responsive:true, plugins:{ legend:{ position:'bottom' } } }
-});
-
-// Daily Chart
-new Chart(document.getElementById('dailyChart'), {
-  type: 'line',
-  data: {
-    labels: <?= json_encode(array_column($daily_visits, 'day')) ?>,
-    datasets: [{
-      label: 'Visits',
-      data: <?= json_encode(array_column($daily_visits, 'count')) ?>,
-      borderColor: '#198754',
-      backgroundColor: 'rgba(25,135,84,0.15)',
-      fill: true,
-      tension: 0.35,
-      borderWidth: 2
-    }]
-  },
-  options: { responsive: true, plugins: { legend: { display: false } } }
-});
-</script>
-
-</main>
+<!-- CHARTS -->
+<div class="row mt-4">
+<div class="col-md-6 mb-3">
+<div class="card p-3">
+<h6>📱 Today Device</h6>
+<canvas id="deviceChart"></canvas>
 </div>
+</div>
+
+<div class="col-md-6 mb-3">
+<div class="card p-3">
+<h6>📆 Weekly Visits</h6>
+<canvas id="weekChart"></canvas>
+</div>
+</div>
+</div>
+
+<div class="row">
+<div class="col-md-6 mb-3">
+<div class="card p-3">
+<h6>🔥 Product Visits</h6>
+<canvas id="productChart"></canvas>
+</div>
+</div>
+
+<div class="col-md-6 mb-3">
+<div class="card p-3">
+<h6>📄 Page Visits</h6>
+<canvas id="pageChart"></canvas>
+</div>
+</div>
+</div>
+
+<!-- PRODUCT TABLE -->
+<div class="card mt-4">
+<div class="card-body">
+<h6>🛒 Product-wise Visits</h6>
+<table class="table table-sm table-striped">
+<tr><th>Product</th><th>Visits</th></tr>
+<?php foreach($productStats as $p): ?>
+<tr>
+<td><?=h($p['name'])?></td>
+<td><?=$p['v']?></td>
+</tr>
+<?php endforeach;?>
+</table>
+</div>
+</div>
+
+<!-- IP TABLE -->
+<div class="card mt-4">
+<div class="card-body">
+<h6>🌐 IP Address Visits</h6>
+<table class="table table-sm table-striped">
+<tr><th>IP</th><th>Device</th><th>Page</th><th>Visits</th><th>Last Visit</th></tr>
+<?php foreach($ipVisits as $v): ?>
+<tr>
+<td><?=h($v['ip_address'])?></td>
+<td><?=$v['device_type']?></td>
+<td><?=$v['page_type']?></td>
+<td><?=$v['visits']?></td>
+<td><?=$v['last_visit']?></td>
+</tr>
+<?php endforeach;?>
+</table>
+
+<nav>
+<ul class="pagination pagination-sm">
+<?php if($page>1): ?>
+<li class="page-item"><a class="page-link" href="?page=<?=$page-1?>">Prev</a></li>
+<?php endif;?>
+<?php if($page<$totalPages): ?>
+<li class="page-item"><a class="page-link" href="?page=<?=$page+1?>">Next</a></li>
+<?php endif;?>
+</ul>
+</nav>
+</div>
+</div>
+
+<a href="?export=1" class="btn btn-success mt-3">⬇ Export CSV</a>
 </div>
 
 <script>
-/* ================= DARK MODE ================= */
-(function(){
-    const body = document.body;
-    const toggle = document.getElementById("themeToggle");
-    const icon = document.getElementById("themeIcon");
+new Chart(deviceChart,{
+ type:'doughnut',
+ data:{labels:<?=json_encode(array_keys($todayDevice))?>,
+ datasets:[{data:<?=json_encode(array_values($todayDevice))?>}]}
+});
 
-    let dark = document.cookie.includes("admin_dark=1");
+new Chart(weekChart,{
+ type:'line',
+ data:{labels:<?=json_encode(array_column($weekly,'d'))?>,
+ datasets:[{data:<?=json_encode(array_column($weekly,'c'))?>,fill:true}]}
+});
 
-    if(!document.cookie.includes("admin_dark=")){
-        dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
+new Chart(productChart,{
+ type:'bar',
+ data:{labels:<?=json_encode(array_column($productStats,'name'))?>,
+ datasets:[{data:<?=json_encode(array_column($productStats,'v'))?>}]}
+});
 
-    applyTheme(dark);
-
-    function applyTheme(d){
-        body.classList.toggle("dark-mode", d);
-        icon.classList.replace(d ? "bi-moon-stars" : "bi-sun-fill", d ? "bi-sun-fill" : "bi-moon-stars");
-    }
-
-    toggle.addEventListener("click", ()=>{
-        dark = !dark;
-        applyTheme(dark);
-        document.cookie = "admin_dark="+(dark?1:0)+"; path=/; max-age=31536000";
-    });
-})();
-
-/* ================= SIDEBAR ================= */
-(function(){
-    const sidebar = document.getElementById("adminSidebar");
-    const overlay = document.getElementById("sidebarOverlay");
-    const toggle = document.getElementById("sidebarToggle");
-    const mobileOpen = document.getElementById("mobileOpen");
-
-    toggle.addEventListener("click", ()=> sidebar.classList.toggle("collapsed"));
-    mobileOpen.addEventListener("click", ()=>{
-        sidebar.classList.add("open");
-        overlay.classList.add("show");
-    });
-
-    overlay.addEventListener("click", ()=>{
-        sidebar.classList.remove("open");
-        overlay.classList.remove("show");
-    });
-
-    document.addEventListener("click",(e)=>{
-        if(window.innerWidth <= 991 &&
-           !sidebar.contains(e.target) &&
-           !mobileOpen.contains(e.target)){
-            sidebar.classList.remove("open");
-            overlay.classList.remove("show");
-        }
-    });
-})();
-
-/* ================= SWIPE TO OPEN ================= */
-(function(){
-    let startX = 0;
-    window.addEventListener("touchstart",(e)=> startX = e.touches[0].clientX);
-    window.addEventListener("touchend",(e)=>{
-        if(startX < 40 && e.changedTouches[0].clientX > 120){
-            document.getElementById("adminSidebar").classList.add("open");
-            document.getElementById("sidebarOverlay").classList.add("show");
-        }
-    });
-})();
-
-/* ================= QUICK ACTION BUTTON ================= */
-(function(){
-    const btn = document.createElement("div");
-    btn.id = "quickBtn";
-    btn.innerHTML = '<i class="bi bi-lightning-charge-fill"></i> Quick Actions';
-    document.body.appendChild(btn);
-    btn.onclick = ()=> alert("Add custom actions here!");
-})();
-
-/* ================= THEME COLOR PICKER ================= */
-(function(){
-    const pick = document.createElement("input");
-    pick.type="color";
-    pick.id="themePicker";
-    pick.value="#198754";
-    document.body.appendChild(pick);
-
-    pick.addEventListener("input",(e)=>{
-        document.documentElement.style.setProperty("--brand-1",e.target.value);
-        document.documentElement.style.setProperty("--brand-2",e.target.value);
-    });
-})();
+new Chart(pageChart,{
+ type:'bar',
+ data:{labels:<?=json_encode(array_keys($pageStats))?>,
+ datasets:[{data:<?=json_encode(array_values($pageStats))?>}]}
+});
 </script>
-
-<!-- Admin JavaScript -->
-<script src="/picklehub_project/admin/assets/js/admin.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js" defer></script>
 </body>
 </html>
-
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
-

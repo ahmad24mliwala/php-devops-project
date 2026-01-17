@@ -17,6 +17,44 @@ $banner_slides = isset($settings['homepage_banner_slides']) ? explode(',', $sett
 $banner_slides = array_map('basename', $banner_slides);
 $banner_slides = array_pad($banner_slides, 4, 'banner_placeholder.jpg');
 
+
+
+
+/*====================== SITE LOGO ====================== */
+$site_logo = $settings['site_logo'] ?? '';
+
+/* ---------------- SAVE LOGO ---------------- */
+if (isset($_POST['save_logo']) && !$error) {
+
+    if (!empty($_FILES['site_logo']['tmp_name'])) {
+
+        $ext = strtolower(pathinfo($_FILES['site_logo']['name'], PATHINFO_EXTENSION));
+
+        if (!in_array($ext, ['png','jpg','jpeg','webp'])) {
+            $error = "Invalid logo format";
+        } else {
+            $fileName = 'logo_' . time() . '.' . $ext;
+
+            if (move_uploaded_file($_FILES['site_logo']['tmp_name'], $uploadDir . $fileName)) {
+
+                $pdo->prepare("
+                    INSERT INTO settings (`key`,`value`)
+                    VALUES ('site_logo',?)
+                    ON DUPLICATE KEY UPDATE `value`=?
+                ")->execute([$fileName, $fileName]);
+
+                $site_logo = $fileName;
+                $success = "Site logo updated successfully";
+            } else {
+                $error = "Failed uploading logo";
+            }
+        }
+    }
+}
+
+
+
+
 /* ---------------- SAVE BANNER ---------------- */
 if (isset($_POST['save_banner']) && !$error) {
     $index = (int)$_POST['banner_index'];
@@ -37,6 +75,14 @@ if (isset($_POST['save_banner']) && !$error) {
         } else $error = "Failed uploading banner.";
     }
 }
+
+
+/*-----------------------Logo update -----------------------*/
+
+
+
+
+
 
 /* ---------------- SAVE ABOUT US ---------------- */
 if (isset($_POST['save_about']) && !$error) {
@@ -185,6 +231,42 @@ body { background: #f5f7fa; font-family: 'Segoe UI', sans-serif; }
     </div>
   </div>
 </div>
+
+<!-- ====================== SITE LOGO ====================== -->
+<div class="card-modern">
+  <div class="card-header-custom">
+    <i class="bi bi-image"></i> Site Logo
+  </div>
+
+  <div class="card-body">
+    <form method="POST" enctype="multipart/form-data">
+      <div class="row g-3 align-items-center">
+
+        <div class="col-md-4">
+          <img id="logoPreview"
+               src="../uploads/<?= h($site_logo ?: 'logo_placeholder.png') ?>"
+               class="img-preview"
+               alt="Site Logo">
+        </div>
+
+        <div class="col-md-8">
+          <label class="fw-semibold">Upload Logo</label>
+          <input type="file"
+                 name="site_logo"
+                 class="form-control mb-2"
+                 accept="image/png,image/jpeg,image/webp"
+                 onchange="previewImage(this,'logoPreview')">
+
+          <button class="btn btn-success px-4" name="save_logo">
+            Save Logo
+          </button>
+        </div>
+
+      </div>
+    </form>
+  </div>
+</div>
+
 
 <!-- ====================== ABOUT US ====================== -->
 <div class="card-modern">

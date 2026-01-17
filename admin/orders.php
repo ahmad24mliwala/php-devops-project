@@ -32,11 +32,14 @@ $valid_statuses = ['pending','processing','shipped','completed','cancelled'];
    Handle AJAX Status Update
    (POST ajax=1 & action=update_status)
    ----------------------------- */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ajax'] ?? '') === '1' && ($_POST['action'] ?? '') === 'update_status') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST'
+    && ($_POST['ajax'] ?? '') === '1'
+    && ($_POST['action'] ?? '') === 'update_status') {
+
     header('Content-Type: application/json; charset=utf-8');
 
     $order_id = intval($_POST['order_id'] ?? 0);
-    $status = $_POST['status'] ?? '';
+    $status   = $_POST['status'] ?? '';
 
     if (!$order_id || !in_array($status, $valid_statuses)) {
         echo json_encode(['status' => 'error', 'message' => 'Invalid parameters']);
@@ -44,11 +47,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ajax'] ?? '') === '1' && (
     }
 
     try {
+        // get old status (for logging clarity)
+        $oldStmt = $pdo->prepare("SELECT status FROM orders WHERE id = ?");
+        $oldStmt->execute([$order_id]);
+        $old_status = $oldStmt->fetchColumn();
+
+        // update status
         $stmt = $pdo->prepare("UPDATE orders SET status = ? WHERE id = ?");
         $stmt->execute([$status, $order_id]);
 
-        $stmtLog = $pdo->prepare("INSERT INTO order_status_logs (order_id, status) VALUES (?, ?)");
+        // status history
+        $stmtLog = $pdo->prepare("
+            INSERT INTO order_status_logs (order_id, status)
+            VALUES (?, ?)
+        ");
         $stmtLog->execute([$order_id, $status]);
+
+        // ✅ LOG ADMIN ACTIVITY (NOW SAFE)
+        log_admin_activity(
+            'update_status',
+            'order',
+            $order_id,
+            "Order status changed from {$old_status} to {$status}"
+        );
 
         echo json_encode(['status' => 'success']);
     } catch (Exception $ex) {
@@ -57,48 +78,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['ajax'] ?? '') === '1' && (
     exit;
 }
 
+
+
 /* -----------------------------
    Handle Reset Orders (POST)
    - triggered by modal form with name=reset_orders
    - verifies admin password (current logged-in user)
    ----------------------------- */
+/* -----------------------------
+   Handle Reset Orders (POST)
+----------------------------- */
 $flash_success = '';
 $flash_error = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_orders'])) {
-    // password from admin
-    $admin_password = $_POST['admin_password'] ?? '';
 
-    // current user from session (functions.php / is_admin ensures this exists)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_orders'])) {
+
+    $admin_password = $_POST['admin_password'] ?? '';
     $current_user = $_SESSION['user'] ?? null;
+
     if (!$current_user || !isset($current_user['id'])) {
         $flash_error = "Unable to verify admin user.";
     } else {
-        // fetch hashed password
+
         $stmt = $pdo->prepare("SELECT password FROM users WHERE id = ?");
         $stmt->execute([$current_user['id']]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$row || !isset($row['password']) || !password_verify($admin_password, $row['password'])) {
+
+        if (!$row || !password_verify($admin_password, $row['password'])) {
             $flash_error = "Password incorrect. Reset aborted.";
         } else {
-            // perform reset: remove order_items, order_status_logs, orders
+
             try {
                 $pdo->beginTransaction();
-                // delete order items
+
                 $pdo->exec("DELETE FROM order_items");
-                // delete logs (if table exists)
                 $pdo->exec("DELETE FROM order_status_logs");
-                // delete orders
                 $pdo->exec("DELETE FROM orders");
+
                 $pdo->commit();
+
                 $flash_success = "All orders have been reset successfully.";
+
+                // ✅ admin activity log
+                log_admin_activity(
+                    'reset',
+                    'orders',
+                    null,
+                    'All orders reset by admin'
+                );
+
             } catch (Exception $ex) {
                 $pdo->rollBack();
                 $flash_error = "Reset failed: " . $ex->getMessage();
             }
         }
     }
-    // after POST, retrieve fresh summary later
-}
+} // ✅ THIS WAS MISSING — VERY IMPORTANT
+
+
+
 
 /* -----------------------------
    CSV Download (GET ?download=1)

@@ -2,102 +2,125 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
+if (session_status() === PHP_SESSION_NONE) session_start();
+
 require '../includes/db.php';
 require '../includes/functions.php';
+require __DIR__ . '/clear_home_cache.php';
+
 is_admin();
 
-// Ensure optional columns exist (non-destructive)
-try {
-    $pdo->exec("ALTER TABLE products ADD COLUMN IF NOT EXISTS weight VARCHAR(50) DEFAULT NULL");
-    $pdo->exec("ALTER TABLE products ADD COLUMN IF NOT EXISTS price_enabled TINYINT(1) DEFAULT 1");
-} catch (Exception $e) { /* ignore */ }
+/* ==========================
+   CSRF TOKEN
+========================== */
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$csrf_token = $_SESSION['csrf_token'];
 
-// Fetch categories
+/* ==========================
+   FETCH CATEGORIES
+========================== */
 $categories = $pdo->query("SELECT * FROM categories")->fetchAll();
 $errors = [];
-$success = '';
+$success = $_SESSION['success'] ?? '';
+unset($_SESSION['success']);
 
-// Add Product
+/* ==========================
+   ADD PRODUCT
+========================== */
 if (isset($_POST['add_product'])) {
-    $name = trim($_POST['name'] ?? '');
-    $slug = trim($_POST['slug'] ?? '');
-    $category_id = intval($_POST['category_id'] ?? 0);
-    $price = $_POST['price'] ?? 0;
-    $stock = intval($_POST['stock'] ?? 0);
-    $desc = $_POST['description'] ?? '';
-    $weight = trim($_POST['weight'] ?? '');
-    $is_cart = isset($_POST['is_cart_enabled']) ? 1 : 0;
-    $is_featured = isset($_POST['is_featured']) ? 1 : 0;
-    $price_enabled = isset($_POST['is_price_enabled']) ? 1 : 0;
 
-    if (empty($name)) $errors[] = "Product name is required.";
-    if ($category_id === 0) $errors[] = "Please select a category.";
-
-    if (empty($slug)) {
-        $slug = strtolower(preg_replace('/[^a-z0-9]+/','-', $name));
-        $slug = trim($slug, '-');
+    if (!hash_equals($csrf_token, $_POST['csrf_token'] ?? '')) {
+        $errors[] = "Invalid session token.";
     }
 
-    // ensure unique slug
-    $check = $pdo->prepare("SELECT COUNT(*) FROM products WHERE slug = ?");
-    $check->execute([$slug]);
-    if ($check->fetchColumn() > 0) $slug .= '-' . time();
+    $name        = trim($_POST['name'] ?? '');
+    $slug        = trim($_POST['slug'] ?? '');
+    $category_id = (int)($_POST['category_id'] ?? 0);
+    $price       = (float)($_POST['price'] ?? 0);
+    $stock       = (int)($_POST['stock'] ?? 0);
+    $desc        = $_POST['description'] ?? '';
+    $weight      = trim($_POST['weight'] ?? '');
 
-    // image handling
+    /* 🧠 AUTO CART LOGIC */
+    $is_cart     = ($stock > 0 && isset($_POST['is_cart_enabled'])) ? 1 : 0;
+    $price_enabled = isset($_POST['is_price_enabled']) ? 1 : 0;
+    $is_featured = isset($_POST['is_featured']) ? 1 : 0;
+
+    if ($name === '') $errors[] = "Product name required";
+    if ($category_id <= 0) $errors[] = "Select category";
+
+    if ($slug === '') {
+        $slug = strtolower(preg_replace('/[^a-z0-9]+/', '-', $name));
+    }
+
+    /* UNIQUE SLUG */
+    $base = $slug; $i = 1;
+    while ($pdo->prepare("SELECT COUNT(*) FROM products WHERE slug=?")->execute([$slug]) && $pdo->query("SELECT FOUND_ROWS()")->fetchColumn()) {
+        $slug = $base . '-' . $i++;
+    }
+
+    /* IMAGE */
     $img_name = '';
     if (!empty($_FILES['image']['tmp_name'])) {
-        $img = $_FILES['image'];
-        $ext = strtolower(pathinfo($img['name'], PATHINFO_EXTENSION));
-        if (in_array($ext, ['jpg','jpeg','png','webp']) && $img['size'] <= 2 * 1024 * 1024) {
-            $img_name = time() . '_' . preg_replace('/[^a-zA-Z0-9_\-.]/', '_', basename($img['name']));
-            if (!is_dir(__DIR__ . '/../uploads')) @mkdir(__DIR__ . '/../uploads', 0755, true);
-            move_uploaded_file($img['tmp_name'], __DIR__ . '/../uploads/' . $img_name);
+        $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['jpg','jpeg','png','webp']) || $_FILES['image']['size'] > 2*1024*1024) {
+            $errors[] = "Invalid image";
         } else {
-            $errors[] = "Invalid image (Only JPG, PNG, WEBP under 2MB allowed).";
+            if (!is_dir('../uploads')) mkdir('../uploads',0755,true);
+            $img_name = uniqid('prd_').'.'.$ext;
+            move_uploaded_file($_FILES['image']['tmp_name'], "../uploads/$img_name");
         }
     }
 
-    if (empty($errors)) {
-        $stmt = $pdo->prepare("INSERT INTO products (category_id,name,slug,description,price,stock,image,is_cart_enabled,is_featured,weight,price_enabled)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)");
-        $stmt->execute([$category_id, $name, $slug, $desc, $price, $stock, $img_name, $is_cart, $is_featured, $weight, $price_enabled]);
-        $success = "✅ Product added successfully!";
+    if (!$errors) {
+        $pdo->prepare("
+            INSERT INTO products 
+            (category_id,name,slug,description,price,stock,image,is_cart_enabled,price_enabled,is_featured,weight)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        ")->execute([
+            $category_id,$name,$slug,$desc,$price,$stock,$img_name,
+            $is_cart,$price_enabled,$is_featured,$weight
+        ]);
+
+        log_admin_activity('create','product',$pdo->lastInsertId(),"Product added: $name");
+        $_SESSION['success'] = "Product added successfully";
+        header("Location: products.php"); exit;
     }
 }
 
-// Delete
-if (isset($_POST['delete_product'])) {
-    $id = intval($_POST['id'] ?? 0);
-    if ($id) {
-        // optional: try delete image file safely
-        $row = $pdo->prepare("SELECT image FROM products WHERE id = ?");
-        $row->execute([$id]);
-        $r = $row->fetch();
-        if ($r && !empty($r['image'])) {
-            $file = __DIR__ . '/../uploads/' . $r['image'];
-            if (file_exists($file)) @unlink($file);
-        }
-        $pdo->prepare("DELETE FROM products WHERE id = ?")->execute([$id]);
-        $success = "🗑️ Product deleted successfully!";
+/* ==========================
+   GLOBAL TOGGLES (FIXED)
+========================== */
+if (isset($_POST['toggle_cart']) && hash_equals($csrf_token, $_POST['csrf_token'] ?? '')) {
+    if ($_POST['toggle_cart'] === 'enable') {
+        $pdo->exec("UPDATE products SET is_cart_enabled=1 WHERE stock > 0");
+    } else {
+        $pdo->exec("UPDATE products SET is_cart_enabled=0");
     }
+    log_admin_activity('update','product',null,'Global cart toggle');
 }
 
-// Global toggles
-if (isset($_POST['toggle_cart'])) {
-    $status = $_POST['toggle_cart'] === 'enable' ? 1 : 0;
-    $pdo->query("UPDATE products SET is_cart_enabled = " . ($status ? '1' : '0'));
-    $success = $status ? "🛒 Add to Cart enabled for all products" : "🛒 Add to Cart disabled for all products";
+if (isset($_POST['toggle_price']) && hash_equals($csrf_token, $_POST['csrf_token'] ?? '')) {
+    $pdo->exec("UPDATE products SET price_enabled=" . ($_POST['toggle_price']==='enable'?1:0));
+    log_admin_activity('update','product',null,'Global price toggle');
 }
 
-if (isset($_POST['toggle_price'])) {
-    $status = $_POST['toggle_price'] === 'enable' ? 1 : 0;
-    $pdo->query("UPDATE products SET price_enabled = " . ($status ? '1' : '0'));
-    $success = $status ? "💰 Price shown for all products" : "💰 Price hidden for all products";
-}
+/* ==========================
+   FETCH PRODUCTS
+========================== */
+$products = $pdo->query("
+    SELECT p.*, c.name AS category
+    FROM products p
+    LEFT JOIN categories c ON p.category_id = c.id
+    ORDER BY p.sort_order ASC, p.id DESC
+")->fetchAll();
 
-// fetch all
-$products = $pdo->query("SELECT p.*, c.name AS category FROM products p LEFT JOIN categories c ON p.category_id = c.id ORDER BY p.id DESC")->fetchAll();
 ?>
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -112,6 +135,32 @@ $products = $pdo->query("SELECT p.*, c.name AS category FROM products p LEFT JOI
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
 
 <style>
+/* Drag handle visuals */
+.drag-handle {
+  cursor: grab;
+  user-select: none;
+  font-size: 18px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Highlight row while dragging */
+.sortable-ghost {
+  background: #e9f5ff !important;
+  opacity: 0.8;
+}
+
+/* Improve touch dragging */
+@media (max-width: 768px) {
+  .drag-handle {
+    font-size: 22px;
+    padding: 8px;
+  }
+}
+
+
 /* keep your colors/layout intact */
 body{background:#f8f9fa;font-family:'Segoe UI',sans-serif;}
 .table td,.table th{vertical-align:middle!important;}
@@ -143,6 +192,8 @@ body{background:#f8f9fa;font-family:'Segoe UI',sans-serif;}
 
   <!-- Global Toggles -->
   <form method="POST" class="mb-3 d-flex flex-wrap gap-2">
+  <input type="hidden" name="csrf_token" value="<?= h($csrf_token) ?>">
+
     <button name="toggle_cart" value="enable" class="btn btn-success btn-sm">Enable Add to Cart for All</button>
     <button name="toggle_cart" value="disable" class="btn btn-warning btn-sm">Disable Add to Cart for All</button>
     <button name="toggle_price" value="enable" class="btn btn-primary btn-sm">Enable Price for All</button>
@@ -152,6 +203,7 @@ body{background:#f8f9fa;font-family:'Segoe UI',sans-serif;}
   <!-- Add Product -->
   <div class="card p-3 mb-4 shadow-sm">
     <form method="POST" enctype="multipart/form-data" class="row g-2">
+  <input type="hidden" name="csrf_token" value="<?= h($csrf_token) ?>">
       <div class="col-md-3">
         <label class="form-label fw-semibold">Product Name</label>
         <input type="text" name="name" class="form-control" required>
@@ -209,50 +261,88 @@ body{background:#f8f9fa;font-family:'Segoe UI',sans-serif;}
   </div>
 
   <!-- Product Table -->
-  <h4 class="mb-3">All Products</h4>
-  <div class="table-responsive bg-white shadow-sm p-2 rounded-3">
-    <table id="productsTable" class="table table-striped align-middle">
-      <thead class="table-success">
-        <tr>
-          <th>ID</th><th>Name</th><th>Price</th><th>Weight</th><th>Stock</th><th>Category</th>
-          <th>Add to Cart</th><th>Price</th><th>Featured</th><th>Image</th><th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php foreach ($products as $p): ?>
-          <tr class="<?= !$p['is_cart_enabled'] ? 'cart-disabled' : '' ?>">
-            <td><?= h($p['id']) ?></td>
-            <td><?= h($p['name']) ?></td>
-            <td>₹<?= h($p['price']) ?></td>
-            <td><?= h($p['weight'] ?: '-') ?></td>
-            <td><?= h($p['stock']) ?></td>
-            <td><?= h($p['category']) ?></td>
-            <td>
-              <button class="btn btn-sm <?= $p['is_cart_enabled'] ? 'btn-success' : 'btn-danger' ?> toggle-cart" data-id="<?= h($p['id']) ?>">
-                <?= $p['is_cart_enabled'] ? 'Enabled' : 'Disabled' ?>
-              </button>
-            </td>
-            <td>
-              <button class="btn btn-sm <?= $p['price_enabled'] ? 'btn-success' : 'btn-danger' ?> toggle-price" data-id="<?= h($p['id']) ?>">
-                <?= $p['price_enabled'] ? 'Shown' : 'Hidden' ?>
-              </button>
-            </td>
-            <td><?= $p['is_featured'] ? 'Yes' : 'No' ?></td>
-            <td><?php if ($p['image']): ?><img src="../uploads/<?= h($p['image']) ?>" class="thumb"><?php endif; ?></td>
-            <td>
-              <button class="btn btn-sm btn-primary edit-btn" data-id="<?= h($p['id']) ?>">Edit</button>
+<h4 class="mb-3">All Products</h4>
 
-              <form method="POST" style="display:inline-block; width:auto;" onsubmit="return confirm('Delete this product?');">
-                <input type="hidden" name="id" value="<?= h($p['id']) ?>">
-                <button type="submit" name="delete_product" class="btn btn-sm btn-danger">Delete</button>
-              </form>
-            </td>
-          </tr>
-        <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
-</div>
+<div class="table-responsive bg-white shadow-sm p-2 rounded-3">
+  
+    
+    <table id="productsTable" class="table table-striped">
+
+  <thead class="table-success">
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Price</th>
+      <th>Weight</th>
+      <th>Stock</th>
+      <th>Category</th>
+      <th>Cart</th>
+      <th>Price</th>
+      <th>Featured</th>
+      <th>Image</th>
+      <th>Action</th>
+      <th>Order</th>
+    </tr>
+  </thead>
+
+  <!-- ✅ SORTABLE CONTAINER -->
+  <tbody id="sortableProducts">
+    <?php foreach ($products as $p): ?>
+      <tr data-id="<?= h($p['id']) ?>"
+          class="<?= !$p['is_cart_enabled'] ? 'cart-disabled' : '' ?>">
+
+        <td><?= h($p['id']) ?></td>
+        <td><?= h($p['name']) ?></td>
+        <td>₹<?= h($p['price']) ?></td>
+        <td><?= h($p['weight'] ?: '-') ?></td>
+        <td><?= h($p['stock']) ?></td>
+        <td><?= h($p['category']) ?></td>
+
+        <td>
+          <button class="btn btn-sm <?= $p['is_cart_enabled'] ? 'btn-success' : 'btn-danger' ?> toggle-cart"
+                  data-id="<?= h($p['id']) ?>">
+            <?= $p['is_cart_enabled'] ? 'Enabled' : 'Disabled' ?>
+          </button>
+        </td>
+
+        <td>
+          <button class="btn btn-sm <?= $p['price_enabled'] ? 'btn-success' : 'btn-danger' ?> toggle-price"
+                  data-id="<?= h($p['id']) ?>">
+            <?= $p['price_enabled'] ? 'Shown' : 'Hidden' ?>
+          </button>
+        </td>
+
+        <td><?= $p['is_featured'] ? 'Yes' : 'No' ?></td>
+
+        <td>
+          <?php if ($p['image']): ?>
+            <img src="../uploads/<?= h($p['image']) ?>" class="thumb">
+          <?php endif; ?>
+        </td>
+
+        <td>
+          <button class="btn btn-sm btn-primary edit-btn"
+                  data-id="<?= h($p['id']) ?>">Edit</button>
+
+          <form method="POST" style="display:inline"
+                onsubmit="return confirm('Delete this product?');">
+            <input type="hidden" name="csrf_token" value="<?= h($csrf_token) ?>">
+            <input type="hidden" name="id" value="<?= h($p['id']) ?>">
+            <button type="submit" name="delete_product"
+                    class="btn btn-sm btn-danger">Delete</button>
+          </form>
+        </td>
+
+        <!-- ✅ DRAG HANDLE -->
+        <td class="text-center">
+          <span class="drag-handle">↕️</span>
+        </td>
+
+      </tr>
+    <?php endforeach; ?>
+  </tbody>
+</table>
+
 
 <!-- Edit Modal -->
 <div class="modal fade" id="editModal" tabindex="-1">
@@ -267,6 +357,8 @@ body{background:#f8f9fa;font-family:'Segoe UI',sans-serif;}
         <div class="mb-2"><label>Name</label><input type="text" name="name" class="form-control" required></div>
         <div class="mb-2"><label>Price</label><input type="number" step="0.01" name="price" class="form-control" required></div>
         <div class="mb-2"><label>Weight</label><input type="text" name="weight" class="form-control"></div>
+        <div class="mb-2"><label>Stock</label><input type="number" name="stock" class="form-control" min="0" required></div>
+
         <div class="mb-2"><label>Description</label><textarea name="description" class="form-control" rows="2"></textarea></div>
         <div class="mb-2"><label>Category</label>
           <select name="category_id" class="form-select">
@@ -289,100 +381,233 @@ body{background:#f8f9fa;font-family:'Segoe UI',sans-serif;}
   </div>
 </div>
 
+<!-- Popular products -->
+<h4 class="mt-5 mb-3">Popular Products (Homepage Order)</h4>
+
+<div class="table-responsive bg-white shadow-sm p-2 rounded-3">
+  <table class="table table-striped align-middle">
+    <thead class="table-warning">
+      <tr>
+        <th>Name</th>
+        <th>Image</th>
+        <th>Order</th>
+      </tr>
+    </thead>
+
+    <tbody id="sortableFeatured">
+      <?php
+      $featured = $pdo->query("
+        SELECT id, name, image 
+        FROM products 
+        WHERE is_featured = 1
+        ORDER BY featured_order ASC, id DESC
+      ")->fetchAll();
+
+      foreach ($featured as $p):
+      ?>
+        <tr data-id="<?= $p['id'] ?>">
+          <td><?= h($p['name']) ?></td>
+          <td>
+            <?php if ($p['image']): ?>
+              <img src="../uploads/<?= h($p['image']) ?>" class="thumb">
+            <?php endif; ?>
+          </td>
+          <td class="text-center">
+            <span class="drag-handle">↕️</span>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+</div>
+
+
 <!-- scripts: DataTables, Bootstrap, product handlers -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
 
 <script>
-$(function(){
-  // initialize DataTable
-  $('#productsTable').DataTable({
-    pageLength: 10,
-    order: [[0, 'desc']],
-    columnDefs: [
-      { orderable: false, targets: [9, 10] } // image + action not sortable
-    ]
+const CSRF = '<?= h($csrf_token) ?>';
+
+$(document).ready(function () {
+
+  /* ==========================
+     DATATABLE INIT (NO SORTING)
+  ========================== */
+  const table = $('#productsTable').DataTable({
+    paging: true,
+    searching: true,
+    ordering: false,
+    info: true,
+    destroy: true
   });
 
-  // load product into modal
-  $('.edit-btn').on('click', async function(){
+  /* ==========================
+     EDIT PRODUCT MODAL
+  ========================== */
+  $(document).on('click', '.edit-btn', async function () {
     const id = $(this).data('id');
+
     try {
       const r = await fetch('product_get.php?id=' + encodeURIComponent(id));
       const p = await r.json();
-      if (p && p.id) {
-        $('#editForm [name=id]').val(p.id);
-        $('#editForm [name=name]').val(p.name);
-        $('#editForm [name=price]').val(p.price);
-        $('#editForm [name=weight]').val(p.weight);
-        $('#editForm [name=description]').val(p.description);
-        $('#editForm [name=category_id]').val(p.category_id);
-        $('#edit_cart').prop('checked', p.is_cart_enabled == 1);
-        $('#edit_price').prop('checked', p.price_enabled == 1);
-        $('#edit_featured').prop('checked', p.is_featured == 1);
 
-        // show modal
-        new bootstrap.Modal(document.getElementById('editModal')).show();
-      } else {
+      if (!p || !p.id) {
         alert('Product not found');
+        return;
       }
+
+      $('#editForm [name=id]').val(p.id);
+      $('#editForm [name=name]').val(p.name);
+      $('#editForm [name=price]').val(p.price);
+      $('#editForm [name=weight]').val(p.weight);
+      $('#editForm [name=stock]').val(p.stock);
+      $('#editForm [name=description]').val(p.description);
+      $('#editForm [name=category_id]').val(p.category_id);
+
+      $('#edit_cart').prop('checked', p.is_cart_enabled == 1);
+      $('#edit_price').prop('checked', p.price_enabled == 1);
+      $('#edit_featured').prop('checked', p.is_featured == 1);
+
+      new bootstrap.Modal(document.getElementById('editModal')).show();
+
     } catch (err) {
       console.error(err);
-      alert('Failed to fetch product');
+      alert('Failed to load product');
     }
   });
 
-  // submit edit via ajax
+  /* ==========================
+     EDIT SUBMIT
+  ========================== */
   $('#editForm').on('submit', async function(e){
     e.preventDefault();
     const fd = new FormData(this);
-    try {
-      const res = await fetch('product_update.php', { method: 'POST', body: fd });
-      const d = await res.json();
-      if (d.status === 'success') location.reload();
-      else alert(d.message || 'Update failed');
-    } catch (err) {
-      console.error(err);
-      alert('Update failed');
-    }
+
+    const res = await fetch('product_update.php', {
+      method: 'POST',
+      body: fd
+    });
+
+    const d = await res.json();
+    if (d.status === 'success') location.reload();
+    else alert(d.message || 'Update failed');
   });
 
-  // toggle add to cart for single product
+  /* ==========================
+     TOGGLE CART
+  ========================== */
   $(document).on('click', '.toggle-cart', async function(){
     const id = $(this).data('id');
-    try {
-      const r = await fetch('product_toggle_cart.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + encodeURIComponent(id)
-      });
-      const d = await r.json();
-      if (d.status === 'success') location.reload();
-      else alert(d.message || 'Failed');
-    } catch (err) {
-      console.error(err);
-    }
+
+    const r = await fetch('product_toggle_cart.php', {
+      method: 'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body: `id=${id}&csrf_token=${CSRF}`
+    });
+
+    const d = await r.json();
+    if (d.status === 'success') location.reload();
+    else alert('Failed');
   });
 
-  // toggle price for single product
+  /* ==========================
+     TOGGLE PRICE
+  ========================== */
   $(document).on('click', '.toggle-price', async function(){
     const id = $(this).data('id');
-    try {
-      const r = await fetch('product_toggle_price.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + encodeURIComponent(id)
-      });
-      const d = await r.json();
-      if (d.status === 'success') location.reload();
-      else alert(d.message || 'Failed');
-    } catch (err) {
-      console.error(err);
-    }
+
+    const r = await fetch('product_toggle_price.php', {
+      method: 'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body: `id=${id}&csrf_token=${CSRF}`
+    });
+
+    const d = await r.json();
+    if (d.status === 'success') location.reload();
+    else alert('Failed');
   });
+
 });
 </script>
+
+
+<script>
+Sortable.create(document.getElementById('sortableProducts'), {
+  animation: 150,
+  handle: '.drag-handle',
+  ghostClass: 'sortable-ghost',
+  delay: 150,
+  delayOnTouchOnly: true,
+
+  onEnd: function () {
+    let order = [];
+
+    document.querySelectorAll('#sortableProducts tr').forEach((row, index) => {
+      order.push({
+        id: row.dataset.id,
+        position: index + 1
+      });
+    });
+
+    fetch('product_reorder_bulk.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        csrf_token: '<?= h($csrf_token) ?>',
+        order: order
+      })
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.success) alert('Reorder failed');
+    });
+  }
+});
+</script>
+
+
+<script>
+Sortable.create(document.getElementById('sortableFeatured'), {
+  animation: 150,
+  handle: '.drag-handle',
+  ghostClass: 'sortable-ghost',
+  delay: 150,
+  delayOnTouchOnly: true,
+
+  onEnd: function () {
+    let order = [];
+
+    document.querySelectorAll('#sortableFeatured tr').forEach((row, index) => {
+      order.push({
+        id: row.dataset.id,
+        position: index + 1
+      });
+    });
+
+    fetch('product_reorder_featured.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        csrf_token: '<?= h($csrf_token) ?>',
+        order: order
+      })
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.success) alert('Featured reorder failed');
+    });
+  }
+});
+</script>
+
+
+
+
+
 
 <!-- single admin.js (kept) - controls dark mode, sidebar, quick panel, picker -->
 <script src="/picklehub_project/admin/assets/js/admin.js" defer></script>

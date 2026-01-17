@@ -271,3 +271,19 @@
 [2025-11-22 16:19:33] [send_invoice_email] 📧 Admin invoice email sent
 [2025-11-22 16:19:33] 🧾 invoice.php loaded
 [2025-11-22 16:19:33] ⚠ Unauthorized user 4 tried to view order 4
+[2025-11-24 01:19:47] 🧾 invoice.php loaded
+[2025-11-24 01:19:50] [send_invoice_email] ✅ Invoice sent to ahmadamliwala2001@gmail.com
+[2025-11-24 01:20:12] [send_invoice_email] 📧 Admin invoice email sent
+[2025-11-24 23:46:23] 🧾 invoice.php loaded
+[2025-11-24 23:46:26] [send_invoice_email] ✅ Invoice sent to ahmadamliwala2001@gmail.com
+[2025-11-24 23:46:27] [send_invoice_email] 📧 Admin invoice email sent
+[2025-11-26 01:05:12] 🧾 invoice.php loaded
+[2025-11-26 01:05:13] [send_invoice_email] ✅ Invoice sent to test@gmail.com
+[2025-11-26 01:05:15] [send_invoice_email] 📧 Admin invoice email sent
+[2025-11-26 01:06:44] 🧾 invoice.php loaded
+[2025-11-26 01:06:45] [send_invoice_email] ✅ Invoice sent to test@gmail.com
+[2025-11-26 01:06:45] [send_invoice_email] 📧 Admin invoice email sent
+[2025-11-26 02:43:53] 🧾 invoice.php loaded
+[2025-11-26 02:43:54] [send_invoice_email] ✅ Invoice sent to test@gmail.com
+[2025-11-26 02:43:55] [send_invoice_email] 📧 Admin invoice email sent
+[2025-11-26 17:03:37] 🧾 invoice.php loaded

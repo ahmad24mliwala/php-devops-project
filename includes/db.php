@@ -10,22 +10,22 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // ==========================================
-// 🔧 Database Configuration
+// 🔧 Database Configuration (Hostinger)
 // ==========================================
-define('DB_HOST', '127.0.0.1');
-define('DB_PORT', '3307'); // ⚠️ Confirm MySQL port in XAMPP or production
-define('DB_NAME', 'picklehub');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_HOST', 'localhost'); 
+define('DB_PORT', '3306');
+define('DB_NAME', 'u304855427_picklehub');
+define('DB_USER', 'u304855427_avojifoods');
+define('DB_PASS', 'Avojifoods@1');   // <-- If connection fails, reset password from Hostinger
 
 // ==========================================
 // ⚙️ PDO Connection Options
 // ==========================================
 $options = [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,      // Throw exceptions on SQL errors
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, // Return associative arrays
-    PDO::ATTR_EMULATE_PREPARES => false,              // Use real prepared statements
-    PDO::ATTR_PERSISTENT => false                     // Set true for long-lived connections if needed
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, 
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_EMULATE_PREPARES => false,
+    PDO::ATTR_PERSISTENT => false
 ];
 
 try {
@@ -33,38 +33,36 @@ try {
     // ✅ Create PDO Connection
     // ======================================
     $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        "mysql:host=" . DB_HOST .
+        ";port=" . DB_PORT .
+        ";dbname=" . DB_NAME .
+        ";charset=utf8mb4",
         DB_USER,
         DB_PASS,
         $options
     );
 
-    // Alias for backward compatibility
+    // Alias
     $conn = $pdo;
 
-    // Set consistent timezone
+    // Set timezone
     $pdo->exec("SET time_zone = '+05:30'");
     date_default_timezone_set('Asia/Kolkata');
 
-    // Enable error reporting during development
+    // Debugging Enabled (Safe)
     ini_set('display_errors', 1);
     ini_set('display_startup_errors', 1);
     error_reporting(E_ALL);
 
 } catch (PDOException $e) {
+
     // ======================================
     // ❌ Connection Failure Handling
     // ======================================
     $error_message = "❌ Database connection failed: " . $e->getMessage();
-    
-    // Log error (helpful for production)
+
     error_log($error_message);
-    
-    // Show friendly message for users
-    if (ini_get('display_errors')) {
-        die("<pre style='color:red; font-family:monospace;'>$error_message</pre>");
-    } else {
-        die("Database connection failed. Please try again later.");
-    }
+
+    die("<pre style='color:red; font-family:monospace;'>$error_message</pre>");
 }
 ?>
