@@ -24,8 +24,6 @@ RUN apt-get update && apt-get install -y \
 # Enable Apache Rewrite Module
 # -------------------------------
 RUN a2enmod rewrite
-
-# Allow .htaccess overrides (IMPORTANT)
 RUN sed -i 's/AllowOverride None/AllowOverride All/g' /etc/apache2/apache2.conf
 
 # -------------------------------
@@ -44,17 +42,26 @@ WORKDIR /var/www/html
 COPY . .
 
 # -------------------------------
-# Install PHP Dependencies (if composer.json exists)
+# Fix Git Safe Directory (Composer fix)
+# -------------------------------
+RUN git config --global --add safe.directory /var/www/html
+
+# -------------------------------
+# Install PHP Dependencies
 # -------------------------------
 RUN if [ -f composer.json ]; then \
         composer install --no-dev --optimize-autoloader; \
     fi
 
 # -------------------------------
-# Permissions (Apache user)
+# Permissions (IMPORTANT)
 # -------------------------------
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html
+
+RUN mkdir -p /var/www/html/uploads /var/www/html/cache \
+ && chown -R www-data:www-data /var/www/html \
+ && chmod -R 755 /var/www/html \
+ && chmod -R 775 /var/www/html/uploads /var/www/html/cache
+
 
 # -------------------------------
 # Expose Port
